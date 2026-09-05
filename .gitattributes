@@ -1,0 +1,17 @@
+# Text files are stored in the repository with LF line endings.
+* text=auto eol=lf
+
+# Binary files must not be modified by line-ending normalization.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
