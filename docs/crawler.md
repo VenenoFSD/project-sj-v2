@@ -116,7 +116,7 @@ IP 分区 ID 可通过 `--list-filters` 获取。
 - 价格走势点
 - 成交记录
 
-当前实现最多获取本次商品列表前 20 个商品的详情，并将详情保存到数据库；指定 `--json` 时也会写入 JSON 的 `details` 字段。
+当前实现会获取本次商品列表中每个商品的详情，并将详情保存到数据库；指定 `--json` 时也会写入 JSON 的 `details` 字段。
 
 ```powershell
 python backend/crawler/crawler.py --pages 5 --detail
@@ -289,7 +289,7 @@ python backend/crawler/crawler.py --list-filters --db data/products.db
 2. 创建一条 `crawl_runs` 抓取记录。
 3. 按页请求商品流并根据商品 ID 去重。
 4. 写入或更新 `products`，并写入本次 `product_snapshots`。
-5. 如果使用 `--detail`，保存前 20 个商品的详情、成交记录和价格走势点。
+5. 如果使用 `--detail`，保存本次抓取全部商品的详情、成交记录和价格走势点。
 6. 执行价格异动检测（除非使用 `--no-alert`）。
 
 主要数据库表：
@@ -307,6 +307,7 @@ python backend/crawler/crawler.py --list-filters --db data/products.db
 
 - 建议从项目根目录运行命令。
 - 全量抓取可能耗时较长，并可能触发站点限流。
-- `--detail` 会产生额外请求，且当前只处理前 20 个商品。
+- `--detail` 会为本次抓取的每个商品产生额外请求，商品数量较多时运行时间会明显增加。
 - `--trend` 不访问网络，只读取本地数据库。
 - 删除 `data/products.db` 会清空商品、历史和抓取记录；下次运行会自动重建数据库结构。
+- 每次执行都会在 `logs/` 下新建独立日志文件，例如 `crawler_20260906_021530_123456.log`。详情请求会记录请求结果、响应字段、解析结果和入库跳过原因；日志文件不会提交到 Git。

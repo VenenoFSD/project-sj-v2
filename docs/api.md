@@ -22,11 +22,7 @@ Swagger UI：`http://127.0.0.1:8000/docs`
 
 查询当前有效商品。
 
-查询参数：`category`（可选）、`limit`（1-100，默认 20）、`offset`（默认 0）。
-
-### `GET /api/products/{cluster_id}`
-
-查询商品详情及最新价格快照。商品不存在返回 `404`。
+查询参数：`category`（可选）、`search`（商品标题关键词，可选）、`limit`（1-100，默认 20）、`offset`（默认 0）。响应包含 `items`、`total`、`limit` 和 `offset`。
 
 ### `GET /api/products/{cluster_id}/history`
 
@@ -38,15 +34,27 @@ Swagger UI：`http://127.0.0.1:8000/docs`
 
 ### `GET /api/products/{cluster_id}/deals`
 
-查询商品成交记录，`limit` 默认 50，最大 500。
+查询商品成交记录，`limit` 默认 50，最大 500。返回 `user_avatar`、`user_name`、`deal_price`、`deal_time`。
 
 ### `GET /api/products/{cluster_id}/price-points`
 
-查询商品价格走势点，`limit` 默认 200，最大 1000。
+查询商品价格走势点，`limit` 默认 200，最大 1000。返回 `date_label`、`avg_price`、`volume`。
 
 ### `GET /api/crawl-runs`
 
 查询抓取批次记录。参数：`limit`（1-100，默认 20）、`offset`（默认 0）。
+
+### `POST /api/crawl-runs`
+
+后台启动一次爬虫任务。请求体字段：`pages`（0-500，默认 0）、`category`、`ip`、`sort`（`hot`、`mostListings`、`priceFirst`）、`detail`、`no_alert`。
+
+接口返回 `task_id` 后，可轮询任务状态：
+
+```text
+GET /api/crawl-runs/tasks/{task_id}
+```
+
+同一后端进程同时只允许一个抓取任务运行。
 
 接口实际响应结构以 Swagger/OpenAPI 为准；新增或修改接口时同步更新本文档。
 

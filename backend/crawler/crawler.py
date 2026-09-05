@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import logging
 import os
 from pathlib import Path
 import random
@@ -24,6 +25,22 @@ import threading
 # 项目根目录及默认数据库路径，避免依赖脚本运行时的当前工作目录。
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "products.db"
+LOG_DIR = PROJECT_ROOT / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOGGER = logging.getLogger("product_tracker.crawler")
+
+
+def configure_run_logger() -> Path:
+    """为本次脚本执行创建独立日志文件。"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    log_path = LOG_DIR / f"crawler_{timestamp}.log"
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.handlers.clear()
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    LOGGER.addHandler(handler)
+    LOGGER.info("crawler run started log_file=%s", log_path)
+    return log_path
 
 try:
     import requests
@@ -371,6 +388,7 @@ class BiliResellCrawler:
     def get_cluster_info(self, cluster_id: str) -> Optional[Dict[str, Any]]:
         """获取商品详情与成交信息"""
         url = "https://mall.bilibili.com/mall-search-items/items_detail/cluster_info"
+        LOGGER.info("detail request cluster_id=%s", cluster_id)
         
         if _HAS_REQUESTS and self.session:
             for attempt in range(1, 4):
@@ -380,8 +398,14 @@ class BiliResellCrawler:
                     if resp.status_code == 200:
                         payload = resp.json()
                         if payload.get("code") == 0:
-                            return self._parse_cluster_detail(payload.get("data", {}))
+                            parsed = self._parse_cluster_detail(payload.get("data", {}))
+                            LOGGER.info("detail success cluster_id=%s parsed_cluster_id=%s deals=%d chart_points=%d fields=%s", cluster_id, parsed.get("cluster_id"), len(parsed.get("deals", [])), len(parsed.get("chart_points", [])), list((payload.get("data") or {}).keys()))
+                            return parsed
+                        LOGGER.warning("detail rejected cluster_id=%s status=%s code=%s message=%s", cluster_id, resp.status_code, payload.get("code"), payload.get("message"))
+                    else:
+                        LOGGER.warning("detail http failure cluster_id=%s status=%s", cluster_id, resp.status_code)
                 except Exception as e:
+                    LOGGER.warning("detail request error cluster_id=%s attempt=%d error=%s", cluster_id, attempt, e)
                     if attempt >= 3:
                         self._log_warning(f"获取商品详情失败 ({cluster_id}): {e}")
                     time.sleep(1.0)
@@ -395,8 +419,12 @@ class BiliResellCrawler:
             with urllib.request.urlopen(req, timeout=self.config.timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
                 if payload.get("code") == 0:
-                    return self._parse_cluster_detail(payload.get("data", {}))
+                    parsed = self._parse_cluster_detail(payload.get("data", {}))
+                    LOGGER.info("detail success cluster_id=%s parsed_cluster_id=%s deals=%d chart_points=%d fields=%s", cluster_id, parsed.get("cluster_id"), len(parsed.get("deals", [])), len(parsed.get("chart_points", [])), list((payload.get("data") or {}).keys()))
+                    return parsed
+                LOGGER.warning("detail rejected cluster_id=%s code=%s message=%s", cluster_id, payload.get("code"), payload.get("message"))
         except Exception as e:
+            LOGGER.warning("detail request error cluster_id=%s error=%s", cluster_id, e)
             self._log_warning(f"获取商品详情失败 ({cluster_id}): {e}")
         return None
     
@@ -412,7 +440,10 @@ class BiliResellCrawler:
         chart_points = []
         if recent_buy.get("chartData"):
             chart_points = recent_buy["chartData"].get("chartPoints", [])
-        deals = recent_buy.get("deals", [])
+        deals = recent_buy.get("deals") or recent_buy.get("recentDeals") or []
+        cluster_id = data.get("clusterId") or basic.get("clusterId") or ""
+        deal_field = "deals" if recent_buy.get("deals") else ("recentDeals" if recent_buy.get("recentDeals") else "none")
+        LOGGER.info("detail payload cluster_id=%s basic_fields=%s recent_buy_fields=%s deal_field=%s deals=%d chart_points=%d", cluster_id, list(basic.keys()), list(recent_buy.keys()), deal_field, len(deals), len(chart_points))
         
         latest_deal_price = None
         if deals and len(deals) > 0 and deals[0].get("dealPrice"):
@@ -425,7 +456,7 @@ class BiliResellCrawler:
                 latest_deal_price = p_val_str if p_val_str.startswith("¥") else f"¥{p_val_str}"
         
         return {
-            "cluster_id": str(basic.get("clusterId", "")),
+            "cluster_id": str(cluster_id),
             "title": basic.get("clusterName", ""),
             "images": header_floor.get("clusterImgList", []),
             "price_tag": price_floor.get("priceTag", {}),
@@ -538,11 +569,13 @@ class SQLiteDataManager:
     def save_detail(self, detail: Dict[str, Any], crawl_run_id: int):
         cluster_id = str(detail.get("cluster_id", ""))
         if not cluster_id:
+            LOGGER.warning("detail skipped reason=missing_cluster_id crawl_run_id=%s", crawl_run_id)
             return
         captured_at = self.get_run_time(crawl_run_id)
         with self.get_connection() as conn:
             row = conn.execute("SELECT id FROM products WHERE cluster_id=?", (cluster_id,)).fetchone()
             if not row:
+                LOGGER.warning("detail skipped cluster_id=%s reason=product_not_found crawl_run_id=%s", cluster_id, crawl_run_id)
                 return
             product_id = row[0]
             conn.execute("INSERT OR REPLACE INTO product_details(product_id,lowest_price,latest_deal_price,price_tag,attributes,images,captured_at) VALUES (?,?,?,?,?,?,?)", (product_id, detail.get("lowest_price"), detail.get("latest_deal_price"), json.dumps(detail.get("price_tag"), ensure_ascii=False), json.dumps(detail.get("attributes", []), ensure_ascii=False), json.dumps(detail.get("images", []), ensure_ascii=False), captured_at))
@@ -550,6 +583,7 @@ class SQLiteDataManager:
                 conn.execute("INSERT INTO product_deals(product_id,deal_json,captured_at) VALUES (?,?,?)", (product_id, json.dumps(deal, ensure_ascii=False), captured_at))
             for point in detail.get("chart_points", []):
                 conn.execute("INSERT INTO product_price_points(product_id,point_json,captured_at) VALUES (?,?,?)", (product_id, json.dumps(point, ensure_ascii=False), captured_at))
+            LOGGER.info("detail saved cluster_id=%s product_id=%s deals=%d chart_points=%d", cluster_id, product_id, len(detail.get("deals", [])), len(detail.get("chart_points", [])))
 
     def _migrate_legacy_products(self, conn):
         """迁移旧版 products(cluster_id, ..., crawl_time) 单表结构。"""
@@ -651,8 +685,11 @@ class SQLiteDataManager:
         started_at = datetime.now().isoformat(timespec="microseconds")
         with self.get_connection() as conn:
             cur = conn.execute("""
-                INSERT INTO crawl_runs(started_at, category, ip_id, sort_type, requested_pages, status)
-                VALUES (?, ?, ?, ?, ?, 'running')
+                INSERT INTO crawl_runs(
+                    started_at, category, ip_id, sort_type, requested_pages,
+                    actual_pages, product_count, status
+                )
+                VALUES (?, ?, ?, ?, ?, 0, 0, 'running')
             """, (started_at, category, ip_id, sort_type, requested_pages))
             return cur.lastrowid
 
@@ -941,6 +978,7 @@ class CSVDataManager:
 
 # ==================== 主程序 ====================
 def main():
+    log_path = configure_run_logger()
     parser = argparse.ArgumentParser(
         description="B站会员购转售商品爬虫 - 生产级优化版",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1071,8 +1109,8 @@ def main():
     if args.detail:
         print("\n【获取商品详情】")
         details = []
-        for i, p in enumerate(products[:20], 1):
-            print(f"  [{i}/{min(20, len(products))}] 获取 {p.title[:30]}...")
+        for i, p in enumerate(products, 1):
+            print(f"  [{i}/{len(products)}] 获取 {p.title[:30]}...")
             detail = crawler.get_cluster_info(p.cluster_id)
             if detail:
                 details.append(detail)

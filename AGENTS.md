@@ -49,7 +49,7 @@ Do not put database queries directly in API route handlers.
 * Reuse the existing crawler implementation; do not rewrite it unnecessarily.
 * Validate API input and return consistent JSON responses.
 * Avoid unnecessary abstractions.
-* The current API is read-oriented; crawler execution is still initiated from the CLI, not through FastAPI.
+* Crawler execution can be initiated from the CLI or through the FastAPI manual trigger endpoint; keep subprocess execution isolated from request handling.
 * Keep API behavior and `docs/api.md` synchronized when endpoints change.
 
 ## Database
@@ -71,7 +71,7 @@ Do not delete or recreate the database as part of normal code changes unless exp
 ## Current capabilities and limits
 
 * The crawler supports home/filter discovery, paginated product collection, optional detail collection, trend analysis, price alerts and JSON/CSV export.
-* `--detail` currently collects details for at most the first 20 products in a run.
+* `--detail` collects details for every product returned in a run; large runs can be slow and more likely to hit rate limits.
 * Detail, deal and price-point APIs only return data previously persisted by a crawler run using `--detail`.
 * The frontend is still the default Vue scaffold and has not been connected to the API.
 * Automated tests, authentication, scheduled crawling and API-triggered crawling are not implemented yet.

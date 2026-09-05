@@ -87,3 +87,25 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/crawl-runs?limit=20"
 4. 通过 `/docs` 或前端调用查询接口。
 
 爬虫是长耗时任务，建议在独立终端运行；后端启动后不会自动执行爬取。
+
+每次爬虫执行都会在 `logs/` 下生成独立日志文件，查看最近一次日志：
+
+```powershell
+$latestLog = Get-ChildItem logs -Filter "crawler_*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Get-Content $latestLog.FullName -Tail 100
+```
+
+也可以通过 API 手动触发后台抓取：
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/crawl-runs `
+  -ContentType "application/json" `
+  -Body '{"pages":1,"category":"898","sort":"hot","detail":false}'
+```
+
+返回 `task_id` 后查询状态：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/crawl-runs/tasks/{task_id}
+```

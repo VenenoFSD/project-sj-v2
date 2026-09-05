@@ -1,4 +1,4 @@
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from datetime import datetime
@@ -6,11 +6,21 @@ import json
 from backend.database.models import CrawlRun, Product, ProductSnapshot, Favorite, ProductDeal, ProductPricePoint
 
 
-def list_products(db: Session, category: str | None, limit: int, offset: int):
+def list_products(db: Session, category: str | None, search: str | None, limit: int, offset: int):
     query = select(Product).where(Product.is_active.is_(True))
     if category:
         query = query.where(Product.category == category)
+    if search:
+        query = query.where(Product.title.ilike(f"%{search}%"))
     return list(db.scalars(query.order_by(desc(Product.last_seen_at)).limit(limit).offset(offset)))
+
+def count_products(db: Session, category: str | None, search: str | None):
+    query = select(func.count()).select_from(Product).where(Product.is_active.is_(True))
+    if category:
+        query = query.where(Product.category == category)
+    if search:
+        query = query.where(Product.title.ilike(f"%{search}%"))
+    return db.scalar(query) or 0
 
 
 def get_product(db: Session, cluster_id: str):
@@ -23,6 +33,10 @@ def get_product_by_id(db: Session, product_id: int):
 def list_product_history(db: Session, product_id: int, limit: int):
     query = select(ProductSnapshot).where(ProductSnapshot.product_id == product_id)
     return list(db.scalars(query.order_by(desc(ProductSnapshot.captured_at)).limit(limit)))
+
+def get_latest_snapshot(db: Session, product_id: int):
+    query = select(ProductSnapshot).where(ProductSnapshot.product_id == product_id).order_by(desc(ProductSnapshot.captured_at), desc(ProductSnapshot.id)).limit(1)
+    return db.scalar(query)
 
 
 def list_crawl_runs(db: Session, limit: int, offset: int):
