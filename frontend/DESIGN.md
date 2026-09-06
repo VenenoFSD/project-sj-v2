@@ -543,3 +543,62 @@ There are no progressive elevation tiers — the system either has the one shado
 - **Map view styling:** the search-results map uses Mapbox-tinted tiles with custom Rausch markers; not captured here.
 - **Form input error states:** error text color (`{colors.primary-error-text}`) is documented, but the full input outline + helper-text combination on validation failure was not visible in the captured surfaces.
 - **Sub-brand palettes:** Luxe (`{colors.luxe}`) and Plus (`{colors.plus}`) are documented as tokens, but their full sub-system (typography overrides, surface treatment) lives on separate sub-domains and is not captured here.
+
+## Project Theme Extension
+
+The source analysis above describes Airbnb's public Light Mode. The current product extends that visual language with an optional Dark Theme. Light Mode remains the default and the visual baseline; Dark Theme is a semantic surface and contrast adaptation, not a separate visual direction.
+
+### Theme Architecture
+
+The application uses semantic CSS variables and applies the active theme to the document root with `data-theme="light"` or `data-theme="dark"`. Components consume semantic variables rather than page-specific HEX values. The user's explicit theme choice is persisted locally under the `sj-select-theme` key. The theme control is a meaningful navigation utility, not decorative UI.
+
+### Semantic Theme Tokens
+
+| Token | Light | Dark | Meaning |
+|---|---|---|---|
+| `--color-canvas` | `#ffffff` | `#151515` | Page background |
+| `--color-surface` | `#ffffff` | `#1d1d1d` | Card, input and Drawer surface |
+| `--color-surface-soft` | `#f7f7f7` | `#242424` | Subtle fills, image placeholders and Skeletons |
+| `--color-surface-strong` | `#f2f2f2` | `#2c2c2c` | Icon buttons, active controls and secondary fills |
+| `--color-text-primary` | `#222222` | `#f5f5f5` | Headings and primary content |
+| `--color-text-secondary` | `#3f3f3f` | `#dedede` | Supporting body content |
+| `--color-text-muted` | `#6a6a6a` | `#ababab` | Labels and secondary metadata |
+| `--color-text-disabled` | `#929292` | `#777777` | Disabled and placeholder content |
+| `--color-border` | `#dddddd` | `#3b3b3b` | Standard control borders |
+| `--color-border-soft` | `#ebebeb` | `#2d2d2d` | Section dividers and subtle separators |
+| `--color-border-strong` | `#c1c1c1` | `#5a5a5a` | Strong input and disabled borders |
+| `--color-accent` | `#ff385c` | `#ff5470` | Rausch brand accent and primary actions |
+| `--color-accent-hover` | `#e00b41` | `#ff7188` | Hover and pressed action state |
+| `--color-accent-disabled` | `#ffd1da` | `#713847` | Disabled primary action surface |
+| `--color-on-accent` | `#ffffff` | `#ffffff` | Text and icons on accent surfaces |
+| `--color-on-accent-disabled` | `#ffffff` | `#ffffff` | Text and icons on disabled accent surfaces |
+| `--color-error` | `#c13515` | `#ff8a65` | Error text and error indicators |
+| `--color-on-error` | `#ffffff` | `#151515` | Text inside error indicators |
+| `--color-error-hover` | `#b32505` | `#ffab91` | Error link hover state |
+| `--color-error-surface` | `#fff4f2` | `#3a211d` | Error message background |
+| `--color-tag-surface` | `#fff0f2` | `#3a2028` | Discount and status tag background |
+| `--color-tooltip-surface` | `#ffffff` | `#2c2c2c` | Chart tooltip background |
+| `--color-tooltip-text` | `#222222` | `#f5f5f5` | Chart tooltip text |
+| `--color-focus` | `#222222` | `#ffffff` | Keyboard focus outline |
+| `--color-scrim` | `rgba(0,0,0,.5)` | `rgba(0,0,0,.68)` | Drawer and modal backdrop |
+
+### Dark Theme Principles
+
+- Dark Theme uses layered surfaces (`#151515`, `#1d1d1d`, `#242424`, `#2c2c2c`) instead of pure black and pure white contrast.
+- Text contrast remains hierarchical: primary text is near-white, body text is softer, and muted text is reserved for metadata and controls.
+- Rausch remains the only main brand accent. Its Dark Theme value is slightly lighter for comfortable visibility on dark surfaces; accent buttons and their disabled state always use white foreground text, and the active state does not rely on transforms or extra decoration.
+- Borders are more visible than Light Mode but remain restrained. Surface separation and borders carry most of the depth instead of increasingly strong shadows.
+- Disabled controls use a darkened Rausch surface with a dedicated muted foreground so they remain visibly disabled without becoming invisible.
+- Real product images are not color-inverted or filtered. Only their surrounding placeholder surfaces adapt to the active theme.
+
+### Elevation and States
+
+Light Mode keeps the documented single card shadow. Dark Theme uses a low-opacity light border plus a restrained black shadow: `rgba(255,255,255,.07) 0 0 0 1px, rgba(0,0,0,.28) 0 4px 12px`. Drawer elevation follows the same rule with a slightly deeper edge shadow. Hover, active, focus, disabled, loading, empty and error states use semantic tokens in both themes.
+
+### Chart Theme
+
+Charts read their colors from theme variables and are redrawn when the theme changes. Light Mode uses muted blue-gray labels and grid lines with the existing red and blue series distinction. Dark Theme increases label, grid and series contrast while keeping the chart background aligned with the Drawer surface. Tooltip content, values and data ordering remain unchanged.
+
+### Light Mode Compatibility
+
+Light Mode is explicitly applied when no saved theme exists. Its semantic token values preserve the current approved visual relationships, including the white canvas, Rausch accent, hairlines, surface fills, text hierarchy, card shadow and modal scrim. Theme implementation must not change API behavior, data processing, component interaction logic or responsive breakpoints.
