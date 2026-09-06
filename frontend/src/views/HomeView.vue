@@ -4,7 +4,7 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, Heart, House, Moon, RefreshCw, Search, Sparkles, Sun, X } from 'lucide-vue-next'
+import { ArrowUpRight, ChevronLeft, ChevronRight, Heart, House, Moon, RefreshCw, Search, Sparkles, Sun, X } from 'lucide-vue-next'
 import { fetchCatalog } from '../api/catalog'
 import { fetchProductDeals, fetchProductDetails, fetchProductHistory, fetchProducts } from '../api/products'
 
@@ -97,17 +97,31 @@ function formatPrice(value) {
   return value === null || value === undefined ? '暂无价格' : `¥${Number(value).toFixed(2)}`
 }
 
+function parsePriceValue(value) {
+  if (value === null || value === undefined) return null
+  const match = String(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
+  return match ? Number(match[0]) : null
+}
+
+function formatDiscount(currentPrice, referencePrice) {
+  const current = parsePriceValue(currentPrice)
+  const reference = parsePriceValue(referencePrice)
+  if (!Number.isFinite(current) || !Number.isFinite(reference) || current < 0 || reference <= 0 || current >= reference) return ''
+  const discount = Math.round((current / reference) * 100) / 10
+  return `${discount.toFixed(1).replace(/\.0$/, '')}折`
+}
+
 function parseTrendValue(value) {
   if (value === null || value === undefined) return null
   const match = String(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
   return match ? Number(match[0]) : null
 }
 
-function getTrendData(items, valueKey, labelKey) {
-  return items
+function getTrendData(items, valueKey, labelKey, reverse = true) {
+  const data = items
     .map((item) => ({ value: parseTrendValue(item[valueKey]), label: item[labelKey] || '' }))
     .filter((item) => Number.isFinite(item.value))
-    .reverse()
+  return reverse ? data.reverse() : data
 }
 
 function formatTrendTime(value) {
@@ -205,7 +219,7 @@ function renderTrendChart(element, data, color, seriesName) {
 }
 
 const priceTrendData = computed(() => getTrendData(drawerData.value?.history || [], 'price', 'captured_at'))
-const dealTrendData = computed(() => getTrendData(drawerData.value?.deals || [], 'deal_price', 'deal_time'))
+const dealTrendData = computed(() => getTrendData(drawerData.value?.deals || [], 'deal_price', 'deal_time', false))
 
 function renderCharts() {
   nextTick(() => {
@@ -278,6 +292,7 @@ watch(category, resetAndLoad)
         <a class="product-tab" href="#products"><span class="product-icon"><Heart :size="20" :stroke-width="1.8" aria-hidden="true" /></span><span>关注</span><span class="new-tag">NEW</span></a>
       </nav>
       <div class="nav-actions">
+        <RouterLink class="admin-link" to="/backend">后台</RouterLink>
         <button class="theme-toggle" type="button" :aria-label="theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'" :title="theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'" @click="toggleTheme">
           <Sun v-if="theme === 'dark'" :size="18" :stroke-width="1.8" aria-hidden="true" />
           <Moon v-else :size="18" :stroke-width="1.8" aria-hidden="true" />
@@ -339,12 +354,11 @@ watch(category, resetAndLoad)
         <div class="card-image-wrap">
           <img v-if="product.img && !imageErrors.has(product.cluster_id)" :src="normalizeImageUrl(product.img)" :alt="product.title" loading="lazy" referrerpolicy="no-referrer" @error="imageFailed(product.cluster_id)" />
           <div v-else class="image-placeholder"><span>暂无图片</span></div>
-          <span class="card-arrow" aria-hidden="true"><ArrowUpRight :size="17" :stroke-width="1.8" /></span>
         </div>
         <div class="card-body">
           <h3>{{ product.title }}</h3>
-          <div class="price-row"><strong>{{ formatPrice(product.price) }}</strong><span v-if="product.reference_price" class="reference">¥{{ Number(product.reference_price).toFixed(2) }}</span></div>
-          <div class="card-meta"><span v-if="product.discount" class="tag">{{ product.discount }}</span><span class="detail-link">查看详情 <ArrowRight :size="15" :stroke-width="1.8" aria-hidden="true" /></span></div>
+          <div class="price-row"><strong>{{ formatPrice(product.price) }}</strong><span v-if="product.reference_price" class="reference">¥{{ Number(product.reference_price).toFixed(2) }}</span><span v-if="formatDiscount(product.price, product.reference_price)" class="price-discount">{{ formatDiscount(product.price, product.reference_price) }}</span></div>
+          <div class="card-meta"><span v-if="product.discount" class="tag">{{ product.discount }}</span></div>
         </div>
       </article>
     </section>
@@ -364,7 +378,7 @@ watch(category, resetAndLoad)
           <div class="drawer-image"><img v-if="selectedProduct.img" :src="normalizeImageUrl(selectedProduct.img)" :alt="selectedProduct.title" referrerpolicy="no-referrer" /></div>
           <p class="drawer-kicker">PRODUCT DETAILS</p>
           <h2>{{ selectedProduct.title }}</h2>
-          <div class="drawer-price-row"><strong>{{ formatPrice((drawerData?.basic || selectedProduct).price) }}</strong><span v-if="(drawerData?.basic || selectedProduct).reference_price" class="reference">¥{{ Number((drawerData?.basic || selectedProduct).reference_price).toFixed(2) }}</span></div>
+          <div class="drawer-price-row"><strong>{{ formatPrice((drawerData?.basic || selectedProduct).price) }}</strong><span v-if="(drawerData?.basic || selectedProduct).reference_price" class="reference">¥{{ Number((drawerData?.basic || selectedProduct).reference_price).toFixed(2) }}</span><span v-if="formatDiscount((drawerData?.basic || selectedProduct).price, (drawerData?.basic || selectedProduct).reference_price)" class="price-discount">{{ formatDiscount((drawerData?.basic || selectedProduct).price, (drawerData?.basic || selectedProduct).reference_price) }}</span></div>
           <div class="tag-row"><span v-if="selectedProduct.discount" class="tag">{{ selectedProduct.discount }}</span><span class="tracked-tag">价格追踪中</span></div>
           <p v-if="drawerError" class="drawer-error" role="alert">{{ drawerError }}</p>
           <section v-if="drawerData?.details" class="detail-section"><div class="section-title"><h3>详情信息</h3><span>OVERVIEW</span></div><div class="detail-facts"><p><span>当前价</span><strong>{{ drawerData.details.price_tag?.firstPrice ? `${drawerData.details.price_tag.firstPriceSymbol || '¥'}${drawerData.details.price_tag.firstPrice}` : '暂无' }}</strong></p><p><span>参考价</span><strong>{{ drawerData.details.price_tag?.price ? `${drawerData.details.price_tag.priceSymbol || '¥'}${drawerData.details.price_tag.price}` : '暂无' }}</strong></p><p><span>最低价</span><strong>{{ drawerData.details.lowest_price || '暂无' }}</strong></p><p><span>最近成交价</span><strong>{{ drawerData.details.latest_deal_price || '暂无' }}</strong></p></div><div v-if="drawerData.details.attributes?.length" class="attribute-list"><div v-for="item in drawerData.details.attributes" :key="item.name"><span>{{ item.name }}</span><strong>{{ item.value }}</strong></div></div></section>
@@ -470,6 +484,8 @@ watch(category, resetAndLoad)
 .product-icon { display: grid; width: 24px; height: 24px; place-items: center; }
 .new-tag { position: absolute; top: 16px; right: -23px; padding: 2px 6px; border-radius: 9999px; background: var(--color-surface-strong); color: var(--color-text-primary); font-size: 8px; font-weight: 700; letter-spacing: .32px; line-height: 1.25; }
 .nav-actions { position: absolute; right: 0; display: flex; align-items: center; }
+.admin-link { margin-right: 16px; color: var(--color-text-muted); font-size: 14px; text-decoration: none; }
+.admin-link:hover, .admin-link:focus-visible { color: var(--color-text-primary); text-decoration: underline; text-underline-offset: 4px; }
 .theme-toggle { display: grid; width: 40px; height: 40px; padding: 0; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
 .theme-toggle:hover, .theme-toggle:focus-visible { background: var(--color-surface-strong); box-shadow: var(--shadow-card); }
 .hero { padding: 64px 0 40px; text-align: center; }
@@ -507,18 +523,15 @@ watch(category, resetAndLoad)
 .card-image-wrap img { display: block; width: 100%; height: 100%; object-fit: contain; transition: transform .25s ease; }
 .product-card:hover .card-image-wrap img { transform: scale(1.03); }
 .image-placeholder { display: grid; height: 100%; place-items: center; color: var(--color-text-disabled); font-size: 12px; }
-.card-arrow { position: absolute; right: 12px; bottom: 12px; display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--color-surface-strong); color: var(--color-text-primary); font-size: 17px; opacity: 0; transition: opacity .2s ease; }
-.product-card:hover .card-arrow, .product-card:focus-visible .card-arrow { opacity: 1; }
 .card-body { padding: 16px; }
 .card-body h3 { display: -webkit-box; min-height: 40px; margin: 0 0 10px; overflow: hidden; color: var(--color-text-primary); font-size: 16px; font-weight: 600; line-height: 1.25; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .price-row { gap: 8px; }
 .price-row strong, .drawer-price-row strong { color: var(--color-accent); font-size: 20px; font-weight: 600; line-height: 1.25; }
 .reference { color: var(--color-text-disabled); font-size: 12px; text-decoration: line-through; }
+.price-discount { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 9999px; background: var(--color-tag-surface); color: var(--color-accent); font-size: 11px; font-weight: 600; line-height: 1.18; }
 .card-meta { justify-content: space-between; min-height: 28px; margin-top: 8px; }
 .tag, .tracked-tag { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 9999px; background: var(--color-tag-surface); color: var(--color-error); font-size: 11px; font-weight: 600; line-height: 1.18; }
 .tracked-tag { background: var(--color-surface-soft); color: var(--color-text-muted); }
-.detail-link { display: inline-flex; align-items: center; gap: 4px; color: var(--color-text-muted); font-size: 13px; opacity: 0; transition: opacity .2s ease; }
-.product-card:hover .detail-link, .product-card:focus-visible .detail-link { opacity: 1; }
 .notice { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 180px; padding: 32px 20px; border: 1px solid var(--color-border-soft); border-radius: 14px; color: var(--color-text-muted); font-size: 14px; }
 .notice-icon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--color-error); color: var(--color-on-error); font-weight: 700; }
 .notice button { padding: 0; border: 0; background: transparent; color: var(--color-error); font-size: 14px; text-decoration: underline; cursor: pointer; }
@@ -590,7 +603,6 @@ watch(category, resetAndLoad)
   .card-body { padding: 16px; }
   .card-body h3 { font-size: 14px; }
   .price-row strong { font-size: 16px; }
-  .detail-link { display: none; }
   .drawer { padding: 24px 20px 40px; }
   .drawer-image { margin-top: 36px; }
   .detail-facts { gap: 0 16px; }

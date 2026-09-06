@@ -487,6 +487,43 @@ def fetch_detail_with_worker(config: CrawlerConfig, cluster_id: str) -> Optional
     time.sleep(random.uniform(0.5, 1.0))
     return detail
 
+
+DETAIL_FAILURE_ID_OUTPUT_LIMIT = 20
+
+
+def report_crawl_summary(list_stats: Dict[str, Any], detail_success: Optional[int] = None, detail_failures: Optional[List[str]] = None):
+    detail_failures = detail_failures or []
+    console_lines = [
+        "",
+        "【抓取统计】",
+        f"  列表请求：成功 {list_stats['succeeded']} 页，失败 {list_stats['failed']} 页",
+    ]
+    log_lines = list(console_lines)
+
+    for failure in list_stats["failures"]:
+        line = f"  列表失败：sort={failure['sort']} page={failure['page']} error={failure['error']}"
+        console_lines.append(line)
+        log_lines.append(line)
+
+    if detail_success is None:
+        console_lines.append("  详情请求：未启用")
+        log_lines.append("  详情请求：未启用")
+    else:
+        console_lines.append(f"  详情请求：成功 {detail_success} 条，失败 {len(detail_failures)} 条")
+        log_lines.append(f"  详情请求：成功 {detail_success} 条，失败 {len(detail_failures)} 条")
+        if detail_failures:
+            failure_ids_line = f"  详情失败商品 ID：{', '.join(detail_failures)}"
+            log_lines.append(failure_ids_line)
+            if len(detail_failures) <= DETAIL_FAILURE_ID_OUTPUT_LIMIT:
+                console_lines.append(failure_ids_line)
+            else:
+                console_lines.append(f"  详情失败商品 ID 过多（{len(detail_failures)} 个），终端不展开；完整 ID 已写入日志。")
+
+    for line in console_lines:
+        print(line)
+    for line in log_lines:
+        LOGGER.info(line)
+
 # ==================== SQLite 数据管理类 ====================
 class SQLiteDataManager:
     """SQLite 数据管理。
@@ -1095,12 +1132,13 @@ def main():
         print_overview(home)
     
     try:
-        products = crawl_products(crawler, args, category, ip_id, args.quiet)
+        products, list_stats = crawl_products(crawler, args, category, ip_id, args.quiet)
     except Exception:
         db_mgr.finish_crawl(crawl_run_id, 0, status="failed", actual_pages=getattr(crawler, "actual_pages", 0))
         raise
 
     if not products:
+        report_crawl_summary(list_stats)
         db_mgr.finish_crawl(crawl_run_id, 0, status="empty", actual_pages=getattr(crawler, "actual_pages", 0))
         print("\n未获取到任何商品")
         return
@@ -1129,6 +1167,8 @@ def main():
     if args.detail:
         print("\n【获取商品详情】")
         detail_results: List[Optional[Dict[str, Any]]] = [None] * len(products)
+        detail_success = 0
+        detail_failures = []
         with ThreadPoolExecutor(max_workers=min(DETAIL_WORKERS, len(products))) as executor:
             future_indices = {
                 executor.submit(fetch_detail_with_worker, crawler.config, product.cluster_id): index
@@ -1145,6 +1185,10 @@ def main():
                 if detail:
                     detail_results[index] = detail
                     db_mgr.save_detail(detail, crawl_run_id)
+                    detail_success += 1
+                else:
+                    detail_failures.append(str(product.cluster_id))
+                    LOGGER.warning("detail failed cluster_id=%s", product.cluster_id)
                 print(f"  [{completed}/{len(products)}] 获取 {product.title[:30]}...")
         details = [detail for detail in detail_results if detail is not None]
         
@@ -1154,6 +1198,9 @@ def main():
             data["details"] = details
             with open(args.json, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+    else:
+        detail_success = None
+        detail_failures = None
     
     # 价格异动检测
     if not args.no_alert:
@@ -1169,13 +1216,15 @@ def main():
             if args.alert_csv:
                 export_alerts_csv(alert_result["alerts"], args.alert_csv)
                 print(f"已导出异动 -> {args.alert_csv}")
+
+    report_crawl_summary(list_stats, detail_success, detail_failures)
     
     print("\n" + "=" * 60)
     print(f"完成！共获取 {len(products)} 条商品")
 
 def crawl_products(crawler: BiliResellCrawler, args, 
                    category: Optional[str], ip_id: Optional[str],
-                   quiet: bool = False) -> List[Product]:
+                   quiet: bool = False) -> Tuple[List[Product], Dict[str, Any]]:
     """抓取商品 - 使用动态终止策略"""
     
     crawler.actual_pages = 0
@@ -1201,6 +1250,7 @@ def crawl_products(crawler: BiliResellCrawler, args,
     
     seen_ids: Set[str] = set()
     products: List[Product] = []
+    list_stats = {"attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
     
     for sort_idx, sort_type in enumerate(sort_modes, 1):
         if len(sort_modes) > 1:
@@ -1217,6 +1267,7 @@ def crawl_products(crawler: BiliResellCrawler, args,
         
         for page in range(1, actual_limit + 1):
             crawler.actual_pages += 1
+            list_stats["attempted"] += 1
             try:
                 feed = crawler.get_feed(
                     page_num=page,
@@ -1224,7 +1275,12 @@ def crawl_products(crawler: BiliResellCrawler, args,
                     category_id=category,
                     ip_id=ip_id
                 )
+                list_stats["succeeded"] += 1
             except Exception as e:
+                list_stats["failed"] += 1
+                failure = {"sort": sort_type, "page": page, "error": str(e)}
+                list_stats["failures"].append(failure)
+                LOGGER.warning("list fetch failed sort=%s page=%s error=%s", sort_type, page, e)
                 if not quiet:
                     print(f"  第{page}页抓取失败: {e}")
                 time.sleep(2.0)
@@ -1282,7 +1338,7 @@ def crawl_products(crawler: BiliResellCrawler, args,
         if _HAS_TQDM and not quiet:
             pbar.close()
     
-    return products
+    return products, list_stats
 
 def print_overview(home: Dict[str, Any]):
     """打印首页概览"""

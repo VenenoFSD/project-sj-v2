@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -13,12 +14,22 @@ _tasks: dict[str, dict] = {}
 
 
 def _watch(task_id: str, process: subprocess.Popen):
-    stdout, _ = process.communicate()
-    with _lock:
-        task = _tasks[task_id]
-        task["return_code"] = process.returncode
-        task["output"] = stdout[-20000:] if stdout else ""
-        task["status"] = "success" if process.returncode == 0 else "failed"
+    try:
+        if process.stdout:
+            for line in iter(process.stdout.readline, ""):
+                with _lock:
+                    task = _tasks.get(task_id)
+                    if task is not None:
+                        task["output"] = f'{task["output"]}{line}'[-20000:]
+    finally:
+        if process.stdout:
+            process.stdout.close()
+        return_code = process.wait()
+        with _lock:
+            task = _tasks.get(task_id)
+            if task is not None:
+                task["return_code"] = return_code
+                task["status"] = "success" if return_code == 0 else "failed"
 
 
 def start_crawl(*, pages: int, category: str | None, ip: str | None, sort: str, detail: bool, no_alert: bool) -> str:
@@ -26,7 +37,7 @@ def start_crawl(*, pages: int, category: str | None, ip: str | None, sort: str, 
         if any(task["status"] == "running" for task in _tasks.values()):
             raise RuntimeError("A crawl task is already running")
         task_id = uuid.uuid4().hex
-        args = [sys.executable, str(CRAWLER_PATH), "--pages", str(pages), "--sort", sort]
+        args = [sys.executable, "-u", str(CRAWLER_PATH), "--pages", str(pages), "--sort", sort]
         if category:
             args += ["--category", category]
         else:
@@ -38,17 +49,21 @@ def start_crawl(*, pages: int, category: str | None, ip: str | None, sort: str, 
         if no_alert:
             args.append("--no-alert")
         env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        display_args = ["python", "-u", CRAWLER_PATH.relative_to(PROJECT_ROOT).as_posix(), *args[3:]]
+        initial_output = f"$ {shlex.join(display_args)}\n\n"
         process = subprocess.Popen(
             args,
             cwd=PROJECT_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            env=env,
             text=True,
             encoding="utf-8",
             errors="replace",
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        _tasks[task_id] = {"task_id": task_id, "status": "running", "pid": process.pid, "output": "", "return_code": None}
+        _tasks[task_id] = {"task_id": task_id, "status": "running", "pid": process.pid, "output": initial_output, "return_code": None}
         threading.Thread(target=_watch, args=(task_id, process), daemon=True).start()
         return task_id
 
