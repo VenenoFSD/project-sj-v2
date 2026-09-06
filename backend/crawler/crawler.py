@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import os
@@ -69,6 +70,8 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
 ]
+
+DETAIL_WORKERS = 5
 
 
 # ==================== 配置类 ====================
@@ -466,6 +469,23 @@ class BiliResellCrawler:
             "chart_points": chart_points,
             "deals": deals,
         }
+
+
+_detail_worker_local = threading.local()
+
+
+def fetch_detail_with_worker(config: CrawlerConfig, cluster_id: str) -> Optional[Dict[str, Any]]:
+    crawler = getattr(_detail_worker_local, "crawler", None)
+    if crawler is None:
+        crawler = BiliResellCrawler(config)
+        _detail_worker_local.crawler = crawler
+    try:
+        detail = crawler.get_cluster_info(cluster_id)
+    except Exception as exc:
+        LOGGER.warning("detail worker error cluster_id=%s error=%s", cluster_id, exc)
+        detail = None
+    time.sleep(random.uniform(0.5, 1.0))
+    return detail
 
 # ==================== SQLite 数据管理类 ====================
 class SQLiteDataManager:
@@ -1108,14 +1128,25 @@ def main():
     # 获取详情
     if args.detail:
         print("\n【获取商品详情】")
-        details = []
-        for i, p in enumerate(products, 1):
-            print(f"  [{i}/{len(products)}] 获取 {p.title[:30]}...")
-            detail = crawler.get_cluster_info(p.cluster_id)
-            if detail:
-                details.append(detail)
-                db_mgr.save_detail(detail, crawl_run_id)
-            time.sleep(random.uniform(0.5, 1.0))
+        detail_results: List[Optional[Dict[str, Any]]] = [None] * len(products)
+        with ThreadPoolExecutor(max_workers=min(DETAIL_WORKERS, len(products))) as executor:
+            future_indices = {
+                executor.submit(fetch_detail_with_worker, crawler.config, product.cluster_id): index
+                for index, product in enumerate(products)
+            }
+            for completed, future in enumerate(as_completed(future_indices), 1):
+                index = future_indices[future]
+                product = products[index]
+                try:
+                    detail = future.result()
+                except Exception as exc:
+                    LOGGER.warning("detail future error cluster_id=%s error=%s", product.cluster_id, exc)
+                    detail = None
+                if detail:
+                    detail_results[index] = detail
+                    db_mgr.save_detail(detail, crawl_run_id)
+                print(f"  [{completed}/{len(products)}] 获取 {product.title[:30]}...")
+        details = [detail for detail in detail_results if detail is not None]
         
         if args.json:
             with open(args.json, "r", encoding="utf-8") as f:
