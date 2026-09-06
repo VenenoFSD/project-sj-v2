@@ -40,6 +40,9 @@ Do not put database queries directly in API route handlers.
 * Use Vue 3 Composition API.
 * Use JavaScript, not TypeScript.
 * Keep the visual style minimal, clean, modern and premium.
+* Strictly follow `frontend/DESIGN.md` for all frontend UI/UX development. Treat it as the source of truth for layout, colors, typography, spacing, radii, shadows, component styles, interaction states and responsive behavior.
+* Read and understand the relevant `frontend/DESIGN.md` guidance before modifying frontend templates or styles; do not introduce visual patterns that conflict with it without explicitly updating the design specification first.
+* Keep visual language consistent across frontend pages and components. Preserve documented hover, active, focus, loading, empty, error and disabled states when implementing or refactoring UI.
 
 ## Backend
 
