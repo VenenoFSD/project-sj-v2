@@ -86,6 +86,8 @@ class CrawlerConfig:
     default_pages: int = 0
     rate_limit_wait_base: float = 2.5
     request_interval: Tuple[float, float] = (0.7, 1.1)
+    page_retries: int = 2
+    page_retry_wait: float = 2.0
     
     # 动态终止策略参数
     window_size: int = 5  # 滑动窗口大小
@@ -257,6 +259,7 @@ class BiliResellCrawler:
     def _api_post_requests(self, url: str, body: Dict[str, Any], retries: int) -> Dict[str, Any]:
         """使用 requests.Session 发送请求"""
         last_error = None
+        rate_limit_streak = 0
         
         for attempt in range(1, retries + 1):
             try:
@@ -270,52 +273,91 @@ class BiliResellCrawler:
                 )
                 
                 if is_rate_limited:
+                    rate_limit_streak += 1
                     wait = self._calculate_wait_time(attempt)
-                    self._log_warning(f"触发频控，等待 {wait:.1f}s 后重试 (第 {attempt}/{retries} 次)")
+                    refresh = rate_limit_streak >= 3
+                    self._log_warning(
+                        f"触发频控，等待 {wait:.1f}s 后重试 "
+                        f"(第 {attempt}/{retries} 次，连续 {rate_limit_streak} 次)"
+                    )
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=rate_limited "
+                        "rate_limit_streak=%d wait=%.1fs refresh_session=%s",
+                        url, attempt, retries, rate_limit_streak, wait, refresh
+                    )
                     time.sleep(wait)
-                    self._refresh_session()
+                    if refresh:
+                        self._refresh_session()
+                        rate_limit_streak = 0
+                        LOGGER.warning(
+                            "api session refreshed url=%s attempt=%d/%d reason=consecutive_rate_limits",
+                            url, attempt, retries
+                        )
                     continue
                 
                 if resp.status_code == 200:
+                    rate_limit_streak = 0
                     payload = resp.json()
                     if not payload.get("success", True):
                         error_msg = payload.get('message', '未知错误')
                         raise RuntimeError(f"接口返回失败: {error_msg}")
                     return payload.get("data", {})
                 else:
+                    rate_limit_streak = 0
                     raise requests.exceptions.HTTPError(f"HTTP {resp.status_code}")
                     
             except json.JSONDecodeError as e:
                 wait = self._calculate_wait_time(attempt) * 2
                 self._log_warning(f"JSON 解析失败 (可能反爬)，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=json_decode_error wait=%.1fs",
+                    url, attempt, retries, wait
+                )
                 self._refresh_session()
                 time.sleep(wait)
                 last_error = e
                 
             except requests.exceptions.Timeout as e:
+                rate_limit_streak = 0
                 wait = attempt * 1.5
                 self._log_warning(f"请求超时，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=timeout wait=%.1fs error=%s",
+                    url, attempt, retries, wait, e
+                )
                 time.sleep(wait)
                 last_error = e
                 
             except requests.exceptions.RequestException as e:
+                rate_limit_streak = 0
                 wait = attempt * 2.0
                 self._log_warning(f"请求异常: {e}，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=request_exception wait=%.1fs error=%s",
+                    url, attempt, retries, wait, e
+                )
                 time.sleep(wait)
                 last_error = e
                 
             except Exception as e:
+                rate_limit_streak = 0
                 if attempt >= retries:
                     raise RuntimeError(f"请求失败 ({url}): {e}")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=exception wait=1.5s error=%s",
+                    url, attempt, retries, e
+                )
                 time.sleep(1.5)
                 last_error = e
         
+        LOGGER.error("api retries exhausted url=%s attempts=%d last_error=%s", url, retries, last_error)
         raise RuntimeError(f"接口重试 {retries} 次仍失败: {last_error}")
     
     def _api_post_urllib(self, url: str, body: Dict[str, Any], retries: int) -> Dict[str, Any]:
         """使用 urllib 发送请求（回退方案）"""
         data = json.dumps(body).encode("utf-8")
         last_error = None
+        rate_limit_streak = 0
         
         for attempt in range(1, retries + 1):
             headers = self._build_headers()
@@ -329,32 +371,71 @@ class BiliResellCrawler:
                 
             except urllib.error.HTTPError as e:
                 if e.code == 429:
+                    rate_limit_streak += 1
                     wait = self._calculate_wait_time(attempt)
-                    self._log_warning(f"触发频控，等待 {wait:.1f}s 后重试")
+                    refresh = rate_limit_streak >= 3
+                    self._log_warning(
+                        f"触发频控，等待 {wait:.1f}s 后重试 "
+                        f"(第 {attempt}/{retries} 次，连续 {rate_limit_streak} 次)"
+                    )
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=rate_limited "
+                        "rate_limit_streak=%d wait=%.1fs refresh_session=%s",
+                        url, attempt, retries, rate_limit_streak, wait, refresh
+                    )
                     time.sleep(wait)
+                    if refresh:
+                        self._refresh_session()
+                        LOGGER.warning(
+                            "api session refreshed url=%s attempt=%d/%d reason=consecutive_rate_limits",
+                            url, attempt, retries
+                        )
+                        rate_limit_streak = 0
                     last_error = RuntimeError(f"HTTP 429: {url}")
                 else:
+                    rate_limit_streak = 0
                     last_error = RuntimeError(f"HTTP {e.code}: {e.reason}")
                     if attempt < retries:
+                        LOGGER.warning(
+                            "api retry url=%s attempt=%d/%d reason=http_%d wait=1.5s",
+                            url, attempt, retries, e.code
+                        )
                         time.sleep(1.5)
                         
             except urllib.error.URLError as e:
+                rate_limit_streak = 0
                 last_error = RuntimeError(f"网络错误: {e.reason}")
                 if attempt < retries:
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=url_error wait=2.0s error=%s",
+                        url, attempt, retries, e.reason
+                    )
                     time.sleep(2.0)
                     
             except json.JSONDecodeError as e:
+                rate_limit_streak = 0
                 wait = self._calculate_wait_time(attempt) * 2
                 self._log_warning(f"JSON 解析失败，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=json_decode_error wait=%.1fs",
+                    url, attempt, retries, wait
+                )
                 time.sleep(wait)
                 last_error = e
                 
             except Exception as e:
+                rate_limit_streak = 0
                 last_error = RuntimeError(f"请求异常: {e}")
                 if attempt < retries:
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=exception wait=1.5s error=%s",
+                        url, attempt, retries, e
+                    )
                     time.sleep(1.5)
         
-        raise last_error or RuntimeError("未知错误")
+        final_error = last_error or RuntimeError("未知错误")
+        LOGGER.error("api retries exhausted url=%s attempts=%d last_error=%s", url, retries, final_error)
+        raise final_error
     
     def _calculate_wait_time(self, attempt: int) -> float:
         """计算退避等待时间（带随机抖动）"""
@@ -1240,13 +1321,9 @@ def crawl_products(crawler: BiliResellCrawler, args,
     print(f"\n【商品流】 模式={mode} {cat_label} {ip_label}")
     
     all_sorts = ["hot", "mostListings", "priceFirst"]
-    if args.pages == 0:
-        primary = args.sort if args.sort in all_sorts else "hot"
-        sort_modes = [primary] + [s for s in all_sorts if s != primary]
-        per_sort_limit = 100
-    else:
-        sort_modes = [args.sort]
-        per_sort_limit = max_pages
+    sort_type = args.sort if args.sort in all_sorts else "hot"
+    sort_modes = [sort_type]
+    per_sort_limit = max_pages
     
     seen_ids: Set[str] = set()
     products: List[Product] = []
@@ -1267,23 +1344,41 @@ def crawl_products(crawler: BiliResellCrawler, args,
         
         for page in range(1, actual_limit + 1):
             crawler.actual_pages += 1
-            list_stats["attempted"] += 1
-            try:
-                feed = crawler.get_feed(
-                    page_num=page,
-                    sort_type=sort_type,
-                    category_id=category,
-                    ip_id=ip_id
-                )
-                list_stats["succeeded"] += 1
-            except Exception as e:
+            feed = None
+            last_error = None
+            total_page_attempts = crawler.config.page_retries + 1
+            for page_attempt in range(1, total_page_attempts + 1):
+                list_stats["attempted"] += 1
+                try:
+                    feed = crawler.get_feed(
+                        page_num=page,
+                        sort_type=sort_type,
+                        category_id=category,
+                        ip_id=ip_id
+                    )
+                    list_stats["succeeded"] += 1
+                    break
+                except Exception as e:
+                    last_error = e
+                    LOGGER.warning(
+                        "page retry sort=%s page=%d attempt=%d/%d wait=%.1fs error=%s",
+                        sort_type, page, page_attempt, total_page_attempts,
+                        crawler.config.page_retry_wait if page_attempt < total_page_attempts else 0.0,
+                        e
+                    )
+                    if page_attempt < total_page_attempts:
+                        if not quiet:
+                            print(f"  第{page}页抓取失败，等待 {crawler.config.page_retry_wait:.1f}s 后重试 ({page_attempt}/{crawler.config.page_retries})")
+                        time.sleep(crawler.config.page_retry_wait)
+
+            if feed is None:
+                e = last_error or RuntimeError("unknown page fetch error")
                 list_stats["failed"] += 1
                 failure = {"sort": sort_type, "page": page, "error": str(e)}
                 list_stats["failures"].append(failure)
                 LOGGER.warning("list fetch failed sort=%s page=%s error=%s", sort_type, page, e)
                 if not quiet:
                     print(f"  第{page}页抓取失败: {e}")
-                time.sleep(2.0)
                 if _HAS_TQDM and not quiet:
                     pbar.update(1)
                 continue

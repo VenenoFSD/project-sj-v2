@@ -73,7 +73,7 @@ python backend/crawler/crawler.py --all
 python backend/crawler/crawler.py --sort priceFirst
 ```
 
-在全量模式下，脚本会依次抓取当前排序方式及另外两种排序方式，并按商品 ID 去重；指定 `--pages` 时只抓取一种排序方式。
+每次运行只抓取一种排序方式；指定 `--sort` 时使用指定排序方式，未指定时使用默认的 `hot`。全量模式最多抓取 500 页，并根据新增率动态停止。
 
 #### `--category CATEGORY`
 
