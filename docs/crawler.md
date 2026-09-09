@@ -14,7 +14,7 @@ cd D:\code\project-sj-v2
 python -m pip install -r requirements.txt
 ```
 
-`requests` 和 `tqdm` 为可选增强依赖。未安装 `requests` 时脚本会回退到标准库 `urllib`；未安装 `tqdm` 时不会显示进度条。
+`requests` 为可选增强依赖。未安装 `requests` 时脚本会回退到标准库 `urllib`。
 
 ## 基本命令
 
@@ -249,7 +249,7 @@ python backend/crawler/crawler.py --no-overview
 
 #### `--quiet`
 
-安静模式，减少商品列表抓取过程中的终端输出，并关闭进度条显示；不改变抓取和入库逻辑。
+安静模式，减少商品列表抓取过程中的终端输出；不改变抓取和入库逻辑。
 
 ```powershell
 python backend/crawler/crawler.py --quiet

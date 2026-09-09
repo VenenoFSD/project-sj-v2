@@ -37,6 +37,24 @@ class CrawlRun(Base):
     status: Mapped[str] = mapped_column(String, nullable=False)
 
 
+class ScheduledCrawl(Base):
+    __tablename__ = "scheduled_crawls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(100))
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    crawl_params: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    last_run_at: Mapped[str | None] = mapped_column(String)
+    last_task_id: Mapped[str | None] = mapped_column(String)
+    last_status: Mapped[str | None] = mapped_column(String)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_finished_at: Mapped[str | None] = mapped_column(String)
+    next_run_at: Mapped[str | None] = mapped_column(String)
+
+
 class ProductSnapshot(Base):
     __tablename__ = "product_snapshots"
 

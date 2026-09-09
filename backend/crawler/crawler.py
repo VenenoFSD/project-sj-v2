@@ -49,12 +49,6 @@ try:
 except ImportError:
     _HAS_REQUESTS = False
 
-try:
-    from tqdm import tqdm
-    _HAS_TQDM = True
-except ImportError:
-    _HAS_TQDM = False
-
 # 解决 Windows 控制台编码问题
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1340,9 +1334,6 @@ def crawl_products(crawler: BiliResellCrawler, args,
         
         actual_limit = per_sort_limit if args.pages == 0 else max_pages
         
-        if _HAS_TQDM and not quiet:
-            pbar = tqdm(total=actual_limit, desc=f"  {sort_type}", unit="页")
-        
         for page in range(1, actual_limit + 1):
             crawler.actual_pages += 1
             feed = None
@@ -1380,8 +1371,6 @@ def crawl_products(crawler: BiliResellCrawler, args,
                 LOGGER.warning("list fetch failed sort=%s page=%s error=%s", sort_type, page, e)
                 if not quiet:
                     print(f"  第{page}页抓取失败: {e}")
-                if _HAS_TQDM and not quiet:
-                    pbar.update(1)
                 continue
             
             items = feed.get("items", [])
@@ -1405,13 +1394,7 @@ def crawl_products(crawler: BiliResellCrawler, args,
             recent_rates.append(new_rate)
             
             if not quiet:
-                if page <= 2 and sort_idx == 1:
-                    for p in added[:10]:
-                        print(f"  - {p.title[:40]} {p.price}")
-                    if len(added) > 10:
-                        print(f"    ... 还有 {len(added)-10} 条")
-                else:
-                    print(f"  第{page:02d}页 | 新增 {len(added):02d}/{len(items)} 条 | 新增率 {new_rate:.1%} | 累计 {len(products)} 条")
+                print(f"  第{page:02d}页 | 新增 {len(added):02d}/{len(items)} 条 | 新增率 {new_rate:.1%} | 累计 {len(products)} 条")
             
             # 动态终止判断：基于新增率
             if len(recent_rates) == crawler.config.window_size:
@@ -1428,11 +1411,6 @@ def crawl_products(crawler: BiliResellCrawler, args,
             
             time.sleep(random.uniform(*crawler.config.request_interval))
             
-            if _HAS_TQDM and not quiet:
-                pbar.update(1)
-        
-        if _HAS_TQDM and not quiet:
-            pbar.close()
     
     return products, list_stats
 

@@ -4,7 +4,7 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { ArrowUpRight, ChevronLeft, ChevronRight, Heart, House, Moon, Search, Sparkles, Sun, X } from 'lucide-vue-next'
+import { ArrowUpRight, ChevronLeft, ChevronRight, House, Moon, Search, Sun, X } from 'lucide-vue-next'
 import { fetchCatalog } from '../api/catalog'
 import { fetchProductDeals, fetchProductDetails, fetchProductHistory, fetchProducts } from '../api/products'
 import BaseSelect from '../components/BaseSelect.vue'
@@ -299,9 +299,7 @@ watch([category, sort], resetAndLoad)
         <span class="brand-name">SJ Select</span>
       </a>
       <nav class="product-nav" aria-label="主导航">
-        <a class="product-tab active" href="#products"><span class="product-icon"><House :size="20" :stroke-width="1.8" aria-hidden="true" /></span><span>商品</span></a>
-        <a class="product-tab" href="#products"><span class="product-icon"><Sparkles :size="20" :stroke-width="1.8" aria-hidden="true" /></span><span>精选</span><span class="new-tag">NEW</span></a>
-        <a class="product-tab" href="#products"><span class="product-icon"><Heart :size="20" :stroke-width="1.8" aria-hidden="true" /></span><span>关注</span><span class="new-tag">NEW</span></a>
+        <RouterLink class="product-tab active" to="/products"><span class="product-icon"><House :size="20" :stroke-width="1.8" aria-hidden="true" /></span><span>商品</span></RouterLink>
       </nav>
       <div class="nav-actions">
         <RouterLink class="admin-link" to="/backend">后台</RouterLink>
@@ -311,10 +309,6 @@ watch([category, sort], resetAndLoad)
         </button>
       </div>
     </header>
-
-    <section class="hero" aria-labelledby="page-title">
-      <h1 id="page-title">发现值得关注的商品</h1>
-    </section>
 
     <div class="search-filter-row">
       <section id="products" class="search-section" aria-label="商品筛选">
@@ -497,16 +491,13 @@ watch([category, sort], resetAndLoad)
 .product-tab.active { color: var(--color-text-primary); font-weight: 600; }
 .product-tab.active::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--color-text-primary); content: ""; }
 .product-icon { display: grid; width: 24px; height: 24px; place-items: center; }
-.new-tag { position: absolute; top: 16px; right: -23px; padding: 2px 6px; border-radius: 9999px; background: var(--color-surface-strong); color: var(--color-text-primary); font-size: 8px; font-weight: 700; letter-spacing: .32px; line-height: 1.25; }
 .nav-actions { position: absolute; right: 0; display: flex; align-items: center; }
 .admin-link { margin-right: 16px; color: var(--color-text-muted); font-size: 14px; text-decoration: none; }
 .admin-link:hover, .admin-link:focus-visible { color: var(--color-text-primary); text-decoration: underline; text-underline-offset: 4px; }
 .theme-toggle { display: grid; width: 40px; height: 40px; padding: 0; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
 .theme-toggle:hover, .theme-toggle:focus-visible { background: var(--color-surface-strong); box-shadow: var(--shadow-card); }
-.hero { padding: 64px 0 40px; text-align: center; }
 .section-kicker, .drawer-kicker { margin: 0 0 12px; color: var(--color-accent); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; }
-.hero h1 { margin: 0; color: var(--color-text-primary); font-size: clamp(24px, 3vw, 28px); font-weight: 700; letter-spacing: 0; line-height: 1.43; }
-.search-filter-row { display: flex; align-items: center; gap: 24px; width: 100%; margin: 0 auto; }
+.search-filter-row { display: flex; align-items: center; gap: 24px; width: 100%; margin: 48px auto 0; }
 .search-section { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 8px; }
 .search-bar { flex: 0 0 48px; height: 48px; padding: 0 6px 0 16px; border: 1px solid var(--color-border); border-radius: 9999px; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .search-field { min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
@@ -528,7 +519,7 @@ watch([category, sort], resetAndLoad)
 .sort-option:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .sort-option.active { background: var(--color-surface); color: var(--color-text-primary); box-shadow: var(--shadow-card); font-weight: 500; }
 .sort-option:disabled { color: var(--color-text-disabled); cursor: not-allowed; opacity: .65; }
-.results-heading { justify-content: space-between; margin: 64px 0 24px; }
+.results-heading { justify-content: space-between; margin: 40px 0 24px; }
 .section-kicker { margin-bottom: 6px; color: var(--color-text-muted); font-size: 10px; letter-spacing: 1px; }
 .results-heading h2 { margin: 0; color: var(--color-text-primary); font-size: 22px; font-weight: 500; letter-spacing: -.44px; line-height: 1.18; }
 .result-count { margin: 20px 0 0; color: var(--color-text-muted); font-size: 14px; }
@@ -609,8 +600,7 @@ watch([category, sort], resetAndLoad)
   .page-shell { width: min(100% - 32px, 560px); }
   .top-nav { height: 64px; }
   .brand-name, .product-nav { display: none; }
-  .hero { padding: 48px 0 32px; }
-  .search-filter-row { display: block; }
+  .search-filter-row { display: block; margin-top: 32px; }
   .search-bar { height: 48px; padding-left: 18px; }
   .search-orb { flex-basis: 40px; width: 40px; height: 40px; font-size: 24px; }
   .filter-row { align-items: stretch; flex-direction: column; gap: 16px; margin-top: 16px; }
@@ -618,7 +608,7 @@ watch([category, sort], resetAndLoad)
   .sort-filter { flex: none; }
   .sort-options { width: 100%; }
   .sort-option { flex: 1; padding: 0 12px; }
-  .results-heading { margin-top: 48px; }
+  .results-heading { margin-top: 32px; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 12px; }
   .card-body { padding: 16px; }
   .card-body h3 { font-size: 14px; }

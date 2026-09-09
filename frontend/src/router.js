@@ -6,6 +6,9 @@ export default createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: HomeView },
-    { path: '/backend', name: 'backend', component: BackendView },
+    { path: '/products', name: 'products', component: HomeView },
+    { path: '/backend', redirect: { name: 'backend-instant' } },
+    { path: '/backend/instant', name: 'backend-instant', component: BackendView },
+    { path: '/backend/scheduled', name: 'backend-scheduled', component: BackendView },
   ],
 })
