@@ -41,11 +41,12 @@ def parse_json(value, default):
 def get_products(
     category: str | None = None,
     search: str | None = Query(None, max_length=100),
+    sort: str | None = Query(None, pattern="^(price|discount)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    products = product_service.list_products(db, category, search, limit, offset)
+    products = product_service.list_products(db, category, search, sort, limit, offset)
     return {"items": [product_payload(product, product_service.get_latest_snapshot(db, product.id)) for product in products], "total": product_service.count_products(db, category, search), "limit": limit, "offset": offset}
 
 

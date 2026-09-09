@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from backend.database import repositories
 
 
-def list_products(db: Session, category: str | None, search: str | None, limit: int, offset: int):
-    return repositories.list_products(db, category, search, limit, offset)
+def list_products(db: Session, category: str | None, search: str | None, sort: str | None, limit: int, offset: int):
+    return repositories.list_products(db, category, search, sort, limit, offset)
 
 def count_products(db: Session, category: str | None, search: str | None):
     return repositories.count_products(db, category, search)

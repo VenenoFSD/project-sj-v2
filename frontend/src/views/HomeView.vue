@@ -4,15 +4,17 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { ArrowUpRight, ChevronLeft, ChevronRight, Heart, House, Moon, RefreshCw, Search, Sparkles, Sun, X } from 'lucide-vue-next'
+import { ArrowUpRight, ChevronLeft, ChevronRight, Heart, House, Moon, Search, Sparkles, Sun, X } from 'lucide-vue-next'
 import { fetchCatalog } from '../api/catalog'
 import { fetchProductDeals, fetchProductDetails, fetchProductHistory, fetchProducts } from '../api/products'
+import BaseSelect from '../components/BaseSelect.vue'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const products = ref([])
 const categories = ref([])
 const category = ref('')
+const sort = ref('')
 const search = ref('')
 const submittedSearch = ref('')
 const page = ref(1)
@@ -32,6 +34,16 @@ const themeStorageKey = 'sj-select-theme'
 let priceChart
 let dealChart
 
+const sortOptions = [
+  { value: '', label: '默认' },
+  { value: 'discount', label: '折扣' },
+  { value: 'price', label: '价格' },
+]
+const categoryOptions = computed(() => [
+  { value: '', label: '全部' },
+  ...categories.value.map((item) => ({ value: String(item.item_id), label: item.name || String(item.item_id) })),
+])
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const pageNumbers = computed(() => {
   const start = Math.max(1, Math.min(page.value - 2, totalPages.value - 4))
@@ -42,7 +54,7 @@ async function loadProducts() {
   loading.value = true
   error.value = ''
   try {
-    const data = await fetchProducts({ category: category.value, search: submittedSearch.value, limit: pageSize, offset: (page.value - 1) * pageSize })
+    const data = await fetchProducts({ category: category.value, search: submittedSearch.value, sort: sort.value, limit: pageSize, offset: (page.value - 1) * pageSize })
     products.value = data.items || []
     total.value = data.total || 0
   } catch (err) {
@@ -276,7 +288,7 @@ onBeforeUnmount(() => {
   disposeCharts()
   document.body.style.overflow = ''
 })
-watch(category, resetAndLoad)
+watch([category, sort], resetAndLoad)
 </script>
 
 <template>
@@ -304,23 +316,26 @@ watch(category, resetAndLoad)
       <h1 id="page-title">发现值得关注的商品</h1>
     </section>
 
-    <section id="products" class="search-section" aria-label="商品筛选">
-      <form class="search-bar" @submit.prevent="submitSearch">
-        <div class="search-field search-field-main">
-          <span class="search-label">搜索商品</span>
-          <input v-model="search" aria-label="搜索商品名称" placeholder="输入商品名称" />
-        </div>
-        <button class="search-orb" type="submit" aria-label="搜索" :disabled="loading"><Search :size="20" :stroke-width="2.2" aria-hidden="true" /></button>
-      </form>
-      <button class="refresh-button" type="button" :disabled="loading" @click="loadProducts">
-        <RefreshCw :size="18" :stroke-width="2" :class="{ spinning: loading }" aria-hidden="true" />
-        <span>{{ loading ? '加载中' : '刷新商品' }}</span>
-      </button>
-    </section>
+    <div class="search-filter-row">
+      <section id="products" class="search-section" aria-label="商品筛选">
+        <span class="filter-label">搜索商品</span>
+        <form class="search-bar" @submit.prevent="submitSearch">
+          <div class="search-field search-field-main">
+            <input v-model="search" aria-label="搜索商品名称" placeholder="输入商品名称" />
+          </div>
+          <button class="search-orb" type="submit" aria-label="搜索" :disabled="loading"><Search :size="20" :stroke-width="2.2" aria-hidden="true" /></button>
+        </form>
+      </section>
 
-    <div v-if="categories.length" class="category-strip" aria-label="分类快捷筛选">
-      <button class="category-tab" :class="{ active: category === '' }" type="button" @click="category = ''">全部</button>
-      <button v-for="item in categories" :key="item.item_id" class="category-tab" :class="{ active: category === item.item_id }" type="button" @click="category = item.item_id">{{ item.name || item.item_id }}</button>
+      <div class="filter-row" aria-label="商品筛选">
+        <BaseSelect v-model="category" class="category-filter" label="分类" :options="categoryOptions" />
+        <div class="sort-filter">
+          <span id="sort-label" class="filter-label">排序</span>
+          <div class="sort-options" role="group" aria-labelledby="sort-label">
+            <button v-for="option in sortOptions" :key="option.value" class="sort-option" :class="{ active: sort === option.value }" type="button" :disabled="loading" @click="sort = option.value">{{ option.label }}</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="results-heading">
@@ -471,7 +486,7 @@ watch(category, resetAndLoad)
 :global(button), :global(a) { -webkit-tap-highlight-color: transparent; }
 .page-shell { width: min(1280px, calc(100% - 64px)); margin: 0 auto; padding-bottom: 64px; }
 .top-nav { display: flex; align-items: center; justify-content: space-between; height: 80px; border-bottom: 1px solid var(--color-border-soft); }
-.brand, .product-tab, .search-bar, .search-field, .category-strip, .results-heading, .price-row, .card-meta, .pagination, .section-title, .drawer-price-row { display: flex; align-items: center; }
+.brand, .product-tab, .search-bar, .search-field, .filter-row, .results-heading, .price-row, .card-meta, .pagination, .section-title, .drawer-price-row { display: flex; align-items: center; }
 .top-nav { position: relative; justify-content: center; }
 .brand { position: absolute; left: 0; gap: 9px; color: var(--color-text-primary); font-size: 16px; font-weight: 600; text-decoration: none; }
 .brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent); font-size: 18px; font-weight: 700; }
@@ -491,26 +506,28 @@ watch(category, resetAndLoad)
 .hero { padding: 64px 0 40px; text-align: center; }
 .section-kicker, .drawer-kicker { margin: 0 0 12px; color: var(--color-accent); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; }
 .hero h1 { margin: 0; color: var(--color-text-primary); font-size: clamp(24px, 3vw, 28px); font-weight: 700; letter-spacing: 0; line-height: 1.43; }
-.search-section { display: flex; align-items: center; gap: 12px; max-width: 850px; margin: 0 auto; }
-.search-bar { flex: 1; height: 64px; padding: 8px 8px 8px 24px; border: 1px solid var(--color-border); border-radius: 9999px; background: var(--color-surface); box-shadow: var(--shadow-card); }
+.search-filter-row { display: flex; align-items: center; gap: 24px; width: 100%; margin: 0 auto; }
+.search-section { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 8px; }
+.search-bar { flex: 0 0 48px; height: 48px; padding: 0 6px 0 16px; border: 1px solid var(--color-border); border-radius: 9999px; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .search-field { min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
 .search-field-main { flex: 1; }
-.search-label { color: var(--color-text-primary); font-size: 12px; font-weight: 600; line-height: 1.33; }
 .search-field input { width: 100%; padding: 0; overflow: hidden; border: 0; outline: 0; background: transparent; color: var(--color-text-muted); font-size: 14px; line-height: 1.43; text-overflow: ellipsis; white-space: nowrap; }
 .search-field input:focus { color: var(--color-text-primary); }
 .search-field input::placeholder { color: var(--color-text-disabled); opacity: 1; }
-.search-orb { display: grid; flex: 0 0 48px; width: 48px; height: 48px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent); cursor: pointer; }
-.search-orb:hover, .search-orb:focus-visible, .refresh-button:hover, .refresh-button:focus-visible { background: var(--color-accent-hover); }
-.search-orb:active, .refresh-button:active { background: var(--color-accent-hover); }
+.search-orb { display: grid; flex: 0 0 40px; width: 40px; height: 40px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent); cursor: pointer; }
+.search-orb:hover, .search-orb:focus-visible { background: var(--color-accent-hover); }
+.search-orb:active { background: var(--color-accent-hover); }
 .search-orb:disabled { background: var(--color-accent-disabled); color: var(--color-on-accent-disabled); cursor: not-allowed; }
-.refresh-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--color-accent); color: var(--color-on-accent); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
-.refresh-button:disabled { background: var(--color-accent-disabled); color: var(--color-on-accent-disabled); cursor: not-allowed; }
-.spinning { animation: spin .8s linear infinite; }
-.category-strip { justify-content: center; gap: 4px; margin: 32px auto 0; padding: 4px; overflow-x: auto; border-radius: 32px; background: var(--color-surface-soft); scrollbar-width: none; }
-.category-strip::-webkit-scrollbar { display: none; }
-.category-tab { flex: 0 0 auto; min-height: 40px; padding: 0 18px; border: 0; border-radius: 9999px; background: transparent; color: var(--color-text-muted); font-size: 14px; cursor: pointer; }
-.category-tab:hover, .category-tab:focus-visible { color: var(--color-text-primary); }
-.category-tab.active { background: var(--color-surface); color: var(--color-text-primary); box-shadow: var(--shadow-card); font-weight: 500; }
+.filter-row { display: flex; align-items: flex-start; flex: 0 0 420px; gap: 24px; min-width: 0; }
+.category-filter { flex: 0 0 180px; min-width: 0; }
+.sort-filter { display: flex; min-width: 0; flex: 1 1 300px; flex-direction: column; align-items: flex-start; gap: 8px; }
+.filter-label { color: var(--color-text-primary); font-size: 13px; font-weight: 600; }
+.sort-options { display: flex; gap: 4px; padding: 4px; border-radius: 32px; background: var(--color-surface-soft); }
+.sort-option { min-height: 40px; padding: 0 18px; border: 0; border-radius: 9999px; background: transparent; color: var(--color-text-muted); font-size: 14px; cursor: pointer; }
+.sort-option:hover, .sort-option:focus-visible { color: var(--color-text-primary); }
+.sort-option:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.sort-option.active { background: var(--color-surface); color: var(--color-text-primary); box-shadow: var(--shadow-card); font-weight: 500; }
+.sort-option:disabled { color: var(--color-text-disabled); cursor: not-allowed; opacity: .65; }
 .results-heading { justify-content: space-between; margin: 64px 0 24px; }
 .section-kicker { margin-bottom: 6px; color: var(--color-text-muted); font-size: 10px; letter-spacing: 1px; }
 .results-heading h2 { margin: 0; color: var(--color-text-primary); font-size: 22px; font-weight: 500; letter-spacing: -.44px; line-height: 1.18; }
@@ -593,11 +610,14 @@ watch(category, resetAndLoad)
   .top-nav { height: 64px; }
   .brand-name, .product-nav { display: none; }
   .hero { padding: 48px 0 32px; }
-  .search-section { display: block; }
-  .search-bar { height: 56px; padding-left: 18px; }
+  .search-filter-row { display: block; }
+  .search-bar { height: 48px; padding-left: 18px; }
   .search-orb { flex-basis: 40px; width: 40px; height: 40px; font-size: 24px; }
-  .refresh-button { width: 100%; margin-top: 12px; }
-  .category-strip { justify-content: flex-start; margin-top: 24px; }
+  .filter-row { align-items: stretch; flex-direction: column; gap: 16px; margin-top: 16px; }
+  .category-filter { width: 100%; flex-basis: auto; }
+  .sort-filter { flex: none; }
+  .sort-options { width: 100%; }
+  .sort-option { flex: 1; padding: 0 12px; }
   .results-heading { margin-top: 48px; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 12px; }
   .card-body { padding: 16px; }

@@ -1,9 +1,10 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
-export async function fetchProducts({ category, search, limit, offset }) {
+export async function fetchProducts({ category, search, sort, limit, offset }) {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
   if (category) params.set('category', category)
   if (search) params.set('search', search)
+  if (sort) params.set('sort', sort)
   const response = await fetch(`${API_BASE}/products?${params}`)
   if (!response.ok) throw new Error(`加载商品失败（${response.status}）`)
   return response.json()

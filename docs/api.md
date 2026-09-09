@@ -20,9 +20,11 @@ Swagger UI：`http://127.0.0.1:8000/docs`
 
 ### `GET /api/products`
 
+列表接口支持可选排序参数 `sort`：`price` 按最新价格从低到高排序，`discount` 按最新 `price / reference_price` 从低到高排序。未传入 `sort` 时保持按最近抓取时间倒序；缺少可排序数据的商品排在有效排序值之后。
+
 查询当前有效商品。
 
-查询参数：`category`（可选）、`search`（商品标题关键词，可选）、`limit`（1-100，默认 20）、`offset`（默认 0）。响应包含 `items`、`total`、`limit` 和 `offset`。
+查询参数：`category`（可选）、`search`（商品标题关键词，可选）、`sort`（`price` 或 `discount`，可选）、`limit`（1-100，默认 20）、`offset`（默认 0）。响应包含 `items`、`total`、`limit` 和 `offset`。
 
 ### `GET /api/products/{cluster_id}/history`
 

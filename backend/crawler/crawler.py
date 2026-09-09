@@ -524,7 +524,7 @@ class BiliResellCrawler:
         chart_points = []
         if recent_buy.get("chartData"):
             chart_points = recent_buy["chartData"].get("chartPoints", [])
-        deals = recent_buy.get("deals") or recent_buy.get("recentDeals") or []
+        deals = recent_buy.get("recentDeals") or []
         cluster_id = data.get("clusterId") or basic.get("clusterId") or ""
         deal_field = "deals" if recent_buy.get("deals") else ("recentDeals" if recent_buy.get("recentDeals") else "none")
         LOGGER.info("detail payload cluster_id=%s basic_fields=%s recent_buy_fields=%s deal_field=%s deals=%d chart_points=%d", cluster_id, list(basic.keys()), list(recent_buy.keys()), deal_field, len(deals), len(chart_points))
@@ -717,6 +717,7 @@ class SQLiteDataManager:
                 return
             product_id = row[0]
             conn.execute("INSERT OR REPLACE INTO product_details(product_id,lowest_price,latest_deal_price,price_tag,attributes,images,captured_at) VALUES (?,?,?,?,?,?,?)", (product_id, detail.get("lowest_price"), detail.get("latest_deal_price"), json.dumps(detail.get("price_tag"), ensure_ascii=False), json.dumps(detail.get("attributes", []), ensure_ascii=False), json.dumps(detail.get("images", []), ensure_ascii=False), captured_at))
+            conn.execute("DELETE FROM product_deals WHERE product_id=?", (product_id,))
             for deal in detail.get("deals", []):
                 conn.execute("INSERT INTO product_deals(product_id,deal_json,captured_at) VALUES (?,?,?)", (product_id, json.dumps(deal, ensure_ascii=False), captured_at))
             for point in detail.get("chart_points", []):
