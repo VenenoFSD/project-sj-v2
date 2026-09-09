@@ -86,6 +86,8 @@ class CrawlerConfig:
     default_pages: int = 0
     rate_limit_wait_base: float = 2.5
     request_interval: Tuple[float, float] = (0.7, 1.1)
+    page_retries: int = 2
+    page_retry_wait: float = 2.0
     
     # 动态终止策略参数
     window_size: int = 5  # 滑动窗口大小
@@ -257,6 +259,7 @@ class BiliResellCrawler:
     def _api_post_requests(self, url: str, body: Dict[str, Any], retries: int) -> Dict[str, Any]:
         """使用 requests.Session 发送请求"""
         last_error = None
+        rate_limit_streak = 0
         
         for attempt in range(1, retries + 1):
             try:
@@ -270,52 +273,91 @@ class BiliResellCrawler:
                 )
                 
                 if is_rate_limited:
+                    rate_limit_streak += 1
                     wait = self._calculate_wait_time(attempt)
-                    self._log_warning(f"触发频控，等待 {wait:.1f}s 后重试 (第 {attempt}/{retries} 次)")
+                    refresh = rate_limit_streak >= 3
+                    self._log_warning(
+                        f"触发频控，等待 {wait:.1f}s 后重试 "
+                        f"(第 {attempt}/{retries} 次，连续 {rate_limit_streak} 次)"
+                    )
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=rate_limited "
+                        "rate_limit_streak=%d wait=%.1fs refresh_session=%s",
+                        url, attempt, retries, rate_limit_streak, wait, refresh
+                    )
                     time.sleep(wait)
-                    self._refresh_session()
+                    if refresh:
+                        self._refresh_session()
+                        rate_limit_streak = 0
+                        LOGGER.warning(
+                            "api session refreshed url=%s attempt=%d/%d reason=consecutive_rate_limits",
+                            url, attempt, retries
+                        )
                     continue
                 
                 if resp.status_code == 200:
+                    rate_limit_streak = 0
                     payload = resp.json()
                     if not payload.get("success", True):
                         error_msg = payload.get('message', '未知错误')
                         raise RuntimeError(f"接口返回失败: {error_msg}")
                     return payload.get("data", {})
                 else:
+                    rate_limit_streak = 0
                     raise requests.exceptions.HTTPError(f"HTTP {resp.status_code}")
                     
             except json.JSONDecodeError as e:
                 wait = self._calculate_wait_time(attempt) * 2
                 self._log_warning(f"JSON 解析失败 (可能反爬)，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=json_decode_error wait=%.1fs",
+                    url, attempt, retries, wait
+                )
                 self._refresh_session()
                 time.sleep(wait)
                 last_error = e
                 
             except requests.exceptions.Timeout as e:
+                rate_limit_streak = 0
                 wait = attempt * 1.5
                 self._log_warning(f"请求超时，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=timeout wait=%.1fs error=%s",
+                    url, attempt, retries, wait, e
+                )
                 time.sleep(wait)
                 last_error = e
                 
             except requests.exceptions.RequestException as e:
+                rate_limit_streak = 0
                 wait = attempt * 2.0
                 self._log_warning(f"请求异常: {e}，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=request_exception wait=%.1fs error=%s",
+                    url, attempt, retries, wait, e
+                )
                 time.sleep(wait)
                 last_error = e
                 
             except Exception as e:
+                rate_limit_streak = 0
                 if attempt >= retries:
                     raise RuntimeError(f"请求失败 ({url}): {e}")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=exception wait=1.5s error=%s",
+                    url, attempt, retries, e
+                )
                 time.sleep(1.5)
                 last_error = e
         
+        LOGGER.error("api retries exhausted url=%s attempts=%d last_error=%s", url, retries, last_error)
         raise RuntimeError(f"接口重试 {retries} 次仍失败: {last_error}")
     
     def _api_post_urllib(self, url: str, body: Dict[str, Any], retries: int) -> Dict[str, Any]:
         """使用 urllib 发送请求（回退方案）"""
         data = json.dumps(body).encode("utf-8")
         last_error = None
+        rate_limit_streak = 0
         
         for attempt in range(1, retries + 1):
             headers = self._build_headers()
@@ -329,32 +371,71 @@ class BiliResellCrawler:
                 
             except urllib.error.HTTPError as e:
                 if e.code == 429:
+                    rate_limit_streak += 1
                     wait = self._calculate_wait_time(attempt)
-                    self._log_warning(f"触发频控，等待 {wait:.1f}s 后重试")
+                    refresh = rate_limit_streak >= 3
+                    self._log_warning(
+                        f"触发频控，等待 {wait:.1f}s 后重试 "
+                        f"(第 {attempt}/{retries} 次，连续 {rate_limit_streak} 次)"
+                    )
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=rate_limited "
+                        "rate_limit_streak=%d wait=%.1fs refresh_session=%s",
+                        url, attempt, retries, rate_limit_streak, wait, refresh
+                    )
                     time.sleep(wait)
+                    if refresh:
+                        self._refresh_session()
+                        LOGGER.warning(
+                            "api session refreshed url=%s attempt=%d/%d reason=consecutive_rate_limits",
+                            url, attempt, retries
+                        )
+                        rate_limit_streak = 0
                     last_error = RuntimeError(f"HTTP 429: {url}")
                 else:
+                    rate_limit_streak = 0
                     last_error = RuntimeError(f"HTTP {e.code}: {e.reason}")
                     if attempt < retries:
+                        LOGGER.warning(
+                            "api retry url=%s attempt=%d/%d reason=http_%d wait=1.5s",
+                            url, attempt, retries, e.code
+                        )
                         time.sleep(1.5)
                         
             except urllib.error.URLError as e:
+                rate_limit_streak = 0
                 last_error = RuntimeError(f"网络错误: {e.reason}")
                 if attempt < retries:
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=url_error wait=2.0s error=%s",
+                        url, attempt, retries, e.reason
+                    )
                     time.sleep(2.0)
                     
             except json.JSONDecodeError as e:
+                rate_limit_streak = 0
                 wait = self._calculate_wait_time(attempt) * 2
                 self._log_warning(f"JSON 解析失败，等待 {wait:.1f}s 后重试")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=json_decode_error wait=%.1fs",
+                    url, attempt, retries, wait
+                )
                 time.sleep(wait)
                 last_error = e
                 
             except Exception as e:
+                rate_limit_streak = 0
                 last_error = RuntimeError(f"请求异常: {e}")
                 if attempt < retries:
+                    LOGGER.warning(
+                        "api retry url=%s attempt=%d/%d reason=exception wait=1.5s error=%s",
+                        url, attempt, retries, e
+                    )
                     time.sleep(1.5)
         
-        raise last_error or RuntimeError("未知错误")
+        final_error = last_error or RuntimeError("未知错误")
+        LOGGER.error("api retries exhausted url=%s attempts=%d last_error=%s", url, retries, final_error)
+        raise final_error
     
     def _calculate_wait_time(self, attempt: int) -> float:
         """计算退避等待时间（带随机抖动）"""
@@ -443,7 +524,7 @@ class BiliResellCrawler:
         chart_points = []
         if recent_buy.get("chartData"):
             chart_points = recent_buy["chartData"].get("chartPoints", [])
-        deals = recent_buy.get("deals") or recent_buy.get("recentDeals") or []
+        deals = recent_buy.get("recentDeals") or []
         cluster_id = data.get("clusterId") or basic.get("clusterId") or ""
         deal_field = "deals" if recent_buy.get("deals") else ("recentDeals" if recent_buy.get("recentDeals") else "none")
         LOGGER.info("detail payload cluster_id=%s basic_fields=%s recent_buy_fields=%s deal_field=%s deals=%d chart_points=%d", cluster_id, list(basic.keys()), list(recent_buy.keys()), deal_field, len(deals), len(chart_points))
@@ -486,6 +567,43 @@ def fetch_detail_with_worker(config: CrawlerConfig, cluster_id: str) -> Optional
         detail = None
     time.sleep(random.uniform(0.5, 1.0))
     return detail
+
+
+DETAIL_FAILURE_ID_OUTPUT_LIMIT = 20
+
+
+def report_crawl_summary(list_stats: Dict[str, Any], detail_success: Optional[int] = None, detail_failures: Optional[List[str]] = None):
+    detail_failures = detail_failures or []
+    console_lines = [
+        "",
+        "【抓取统计】",
+        f"  列表请求：成功 {list_stats['succeeded']} 页，失败 {list_stats['failed']} 页",
+    ]
+    log_lines = list(console_lines)
+
+    for failure in list_stats["failures"]:
+        line = f"  列表失败：sort={failure['sort']} page={failure['page']} error={failure['error']}"
+        console_lines.append(line)
+        log_lines.append(line)
+
+    if detail_success is None:
+        console_lines.append("  详情请求：未启用")
+        log_lines.append("  详情请求：未启用")
+    else:
+        console_lines.append(f"  详情请求：成功 {detail_success} 条，失败 {len(detail_failures)} 条")
+        log_lines.append(f"  详情请求：成功 {detail_success} 条，失败 {len(detail_failures)} 条")
+        if detail_failures:
+            failure_ids_line = f"  详情失败商品 ID：{', '.join(detail_failures)}"
+            log_lines.append(failure_ids_line)
+            if len(detail_failures) <= DETAIL_FAILURE_ID_OUTPUT_LIMIT:
+                console_lines.append(failure_ids_line)
+            else:
+                console_lines.append(f"  详情失败商品 ID 过多（{len(detail_failures)} 个），终端不展开；完整 ID 已写入日志。")
+
+    for line in console_lines:
+        print(line)
+    for line in log_lines:
+        LOGGER.info(line)
 
 # ==================== SQLite 数据管理类 ====================
 class SQLiteDataManager:
@@ -599,6 +717,7 @@ class SQLiteDataManager:
                 return
             product_id = row[0]
             conn.execute("INSERT OR REPLACE INTO product_details(product_id,lowest_price,latest_deal_price,price_tag,attributes,images,captured_at) VALUES (?,?,?,?,?,?,?)", (product_id, detail.get("lowest_price"), detail.get("latest_deal_price"), json.dumps(detail.get("price_tag"), ensure_ascii=False), json.dumps(detail.get("attributes", []), ensure_ascii=False), json.dumps(detail.get("images", []), ensure_ascii=False), captured_at))
+            conn.execute("DELETE FROM product_deals WHERE product_id=?", (product_id,))
             for deal in detail.get("deals", []):
                 conn.execute("INSERT INTO product_deals(product_id,deal_json,captured_at) VALUES (?,?,?)", (product_id, json.dumps(deal, ensure_ascii=False), captured_at))
             for point in detail.get("chart_points", []):
@@ -1095,12 +1214,13 @@ def main():
         print_overview(home)
     
     try:
-        products = crawl_products(crawler, args, category, ip_id, args.quiet)
+        products, list_stats = crawl_products(crawler, args, category, ip_id, args.quiet)
     except Exception:
         db_mgr.finish_crawl(crawl_run_id, 0, status="failed", actual_pages=getattr(crawler, "actual_pages", 0))
         raise
 
     if not products:
+        report_crawl_summary(list_stats)
         db_mgr.finish_crawl(crawl_run_id, 0, status="empty", actual_pages=getattr(crawler, "actual_pages", 0))
         print("\n未获取到任何商品")
         return
@@ -1129,6 +1249,8 @@ def main():
     if args.detail:
         print("\n【获取商品详情】")
         detail_results: List[Optional[Dict[str, Any]]] = [None] * len(products)
+        detail_success = 0
+        detail_failures = []
         with ThreadPoolExecutor(max_workers=min(DETAIL_WORKERS, len(products))) as executor:
             future_indices = {
                 executor.submit(fetch_detail_with_worker, crawler.config, product.cluster_id): index
@@ -1145,6 +1267,10 @@ def main():
                 if detail:
                     detail_results[index] = detail
                     db_mgr.save_detail(detail, crawl_run_id)
+                    detail_success += 1
+                else:
+                    detail_failures.append(str(product.cluster_id))
+                    LOGGER.warning("detail failed cluster_id=%s", product.cluster_id)
                 print(f"  [{completed}/{len(products)}] 获取 {product.title[:30]}...")
         details = [detail for detail in detail_results if detail is not None]
         
@@ -1154,6 +1280,9 @@ def main():
             data["details"] = details
             with open(args.json, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+    else:
+        detail_success = None
+        detail_failures = None
     
     # 价格异动检测
     if not args.no_alert:
@@ -1169,13 +1298,15 @@ def main():
             if args.alert_csv:
                 export_alerts_csv(alert_result["alerts"], args.alert_csv)
                 print(f"已导出异动 -> {args.alert_csv}")
+
+    report_crawl_summary(list_stats, detail_success, detail_failures)
     
     print("\n" + "=" * 60)
     print(f"完成！共获取 {len(products)} 条商品")
 
 def crawl_products(crawler: BiliResellCrawler, args, 
                    category: Optional[str], ip_id: Optional[str],
-                   quiet: bool = False) -> List[Product]:
+                   quiet: bool = False) -> Tuple[List[Product], Dict[str, Any]]:
     """抓取商品 - 使用动态终止策略"""
     
     crawler.actual_pages = 0
@@ -1191,16 +1322,13 @@ def crawl_products(crawler: BiliResellCrawler, args,
     print(f"\n【商品流】 模式={mode} {cat_label} {ip_label}")
     
     all_sorts = ["hot", "mostListings", "priceFirst"]
-    if args.pages == 0:
-        primary = args.sort if args.sort in all_sorts else "hot"
-        sort_modes = [primary] + [s for s in all_sorts if s != primary]
-        per_sort_limit = 100
-    else:
-        sort_modes = [args.sort]
-        per_sort_limit = max_pages
+    sort_type = args.sort if args.sort in all_sorts else "hot"
+    sort_modes = [sort_type]
+    per_sort_limit = max_pages
     
     seen_ids: Set[str] = set()
     products: List[Product] = []
+    list_stats = {"attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
     
     for sort_idx, sort_type in enumerate(sort_modes, 1):
         if len(sort_modes) > 1:
@@ -1217,17 +1345,41 @@ def crawl_products(crawler: BiliResellCrawler, args,
         
         for page in range(1, actual_limit + 1):
             crawler.actual_pages += 1
-            try:
-                feed = crawler.get_feed(
-                    page_num=page,
-                    sort_type=sort_type,
-                    category_id=category,
-                    ip_id=ip_id
-                )
-            except Exception as e:
+            feed = None
+            last_error = None
+            total_page_attempts = crawler.config.page_retries + 1
+            for page_attempt in range(1, total_page_attempts + 1):
+                list_stats["attempted"] += 1
+                try:
+                    feed = crawler.get_feed(
+                        page_num=page,
+                        sort_type=sort_type,
+                        category_id=category,
+                        ip_id=ip_id
+                    )
+                    list_stats["succeeded"] += 1
+                    break
+                except Exception as e:
+                    last_error = e
+                    LOGGER.warning(
+                        "page retry sort=%s page=%d attempt=%d/%d wait=%.1fs error=%s",
+                        sort_type, page, page_attempt, total_page_attempts,
+                        crawler.config.page_retry_wait if page_attempt < total_page_attempts else 0.0,
+                        e
+                    )
+                    if page_attempt < total_page_attempts:
+                        if not quiet:
+                            print(f"  第{page}页抓取失败，等待 {crawler.config.page_retry_wait:.1f}s 后重试 ({page_attempt}/{crawler.config.page_retries})")
+                        time.sleep(crawler.config.page_retry_wait)
+
+            if feed is None:
+                e = last_error or RuntimeError("unknown page fetch error")
+                list_stats["failed"] += 1
+                failure = {"sort": sort_type, "page": page, "error": str(e)}
+                list_stats["failures"].append(failure)
+                LOGGER.warning("list fetch failed sort=%s page=%s error=%s", sort_type, page, e)
                 if not quiet:
                     print(f"  第{page}页抓取失败: {e}")
-                time.sleep(2.0)
                 if _HAS_TQDM and not quiet:
                     pbar.update(1)
                 continue
@@ -1282,7 +1434,7 @@ def crawl_products(crawler: BiliResellCrawler, args,
         if _HAS_TQDM and not quiet:
             pbar.close()
     
-    return products
+    return products, list_stats
 
 def print_overview(home: Dict[str, Any]):
     """打印首页概览"""

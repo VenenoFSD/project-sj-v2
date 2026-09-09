@@ -73,7 +73,7 @@ python backend/crawler/crawler.py --all
 python backend/crawler/crawler.py --sort priceFirst
 ```
 
-在全量模式下，脚本会依次抓取当前排序方式及另外两种排序方式，并按商品 ID 去重；指定 `--pages` 时只抓取一种排序方式。
+每次运行只抓取一种排序方式；指定 `--sort` 时使用指定排序方式，未指定时使用默认的 `hot`。全量模式最多抓取 500 页，并根据新增率动态停止。
 
 #### `--category CATEGORY`
 
@@ -311,3 +311,4 @@ python backend/crawler/crawler.py --list-filters --db data/products.db
 - `--trend` 不访问网络，只读取本地数据库。
 - 删除 `data/products.db` 会清空商品、历史和抓取记录；下次运行会自动重建数据库结构。
 - 每次执行都会在 `logs/` 下新建独立日志文件，例如 `crawler_20260906_021530_123456.log`。详情请求会记录请求结果、响应字段、解析结果和入库跳过原因；日志文件不会提交到 Git。
+- 正常抓取完成后会输出列表请求和详情请求的成功/失败统计。列表失败会记录排序方式、页码和错误信息；详情失败会记录商品 ID。详情失败不超过 20 条时终端展开 ID，超过 20 条时终端只显示数量，完整 ID 仍写入本次日志。

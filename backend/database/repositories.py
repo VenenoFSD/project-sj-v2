@@ -1,18 +1,40 @@
 from sqlalchemy import desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from datetime import datetime
 import json
 from backend.database.models import CrawlRun, Product, ProductSnapshot, Favorite, ProductDeal, ProductPricePoint
 
 
-def list_products(db: Session, category: str | None, search: str | None, limit: int, offset: int):
+def list_products(db: Session, category: str | None, search: str | None, sort: str | None, limit: int, offset: int):
     query = select(Product).where(Product.is_active.is_(True))
     if category:
         query = query.where(Product.category == category)
     if search:
         query = query.where(Product.title.ilike(f"%{search}%"))
-    return list(db.scalars(query.order_by(desc(Product.last_seen_at)).limit(limit).offset(offset)))
+    if sort:
+        latest_snapshot = aliased(ProductSnapshot)
+        latest_snapshot_id = (
+            select(ProductSnapshot.id)
+            .where(ProductSnapshot.product_id == Product.id)
+            .order_by(desc(ProductSnapshot.captured_at), desc(ProductSnapshot.id))
+            .limit(1)
+            .scalar_subquery()
+        )
+        query = query.outerjoin(latest_snapshot, latest_snapshot.id == latest_snapshot_id)
+        if sort == "price":
+            sort_value = latest_snapshot.price
+        else:
+            sort_value = latest_snapshot.price / func.nullif(latest_snapshot.reference_price, 0)
+        query = query.order_by(
+            sort_value.is_(None),
+            sort_value.asc(),
+            desc(Product.last_seen_at),
+            Product.id.asc(),
+        )
+    else:
+        query = query.order_by(desc(Product.last_seen_at), Product.id.asc())
+    return list(db.scalars(query.limit(limit).offset(offset)))
 
 def count_products(db: Session, category: str | None, search: str | None):
     query = select(func.count()).select_from(Product).where(Product.is_active.is_(True))
