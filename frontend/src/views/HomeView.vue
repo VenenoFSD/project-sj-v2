@@ -8,6 +8,7 @@ import { ArrowUpRight, ChevronLeft, ChevronRight, House, Moon, Search, Sun, X } 
 import { fetchCatalog } from '../api/catalog'
 import { fetchProductDeals, fetchProductDetails, fetchProductHistory, fetchProducts } from '../api/products'
 import BaseSelect from '../components/BaseSelect.vue'
+import AppFooter from '../components/AppFooter.vue'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -397,87 +398,11 @@ watch([category, sort], resetAndLoad)
         </template>
       </aside>
     </div>
+    <AppFooter />
   </main>
 </template>
 
 <style scoped>
-:global(*) { box-sizing: border-box; }
-:global(html) { scroll-behavior: smooth; }
-:global(:root) {
-  color-scheme: light;
-  --color-canvas: #fff;
-  --color-surface: #fff;
-  --color-surface-soft: #f7f7f7;
-  --color-surface-strong: #f2f2f2;
-  --color-text-primary: #222;
-  --color-text-secondary: #3f3f3f;
-  --color-text-muted: #6a6a6a;
-  --color-text-disabled: #929292;
-  --color-border: #ddd;
-  --color-border-soft: #ebebeb;
-  --color-border-strong: #c1c1c1;
-  --color-accent: #ff385c;
-  --color-accent-hover: #e00b41;
-  --color-accent-disabled: #ffd1da;
-  --color-on-accent: #fff;
-  --color-on-accent-disabled: #fff;
-  --color-error: #c13515;
-  --color-on-error: #fff;
-  --color-error-hover: #b32505;
-  --color-error-surface: #fff4f2;
-  --color-tag-surface: #fff0f2;
-  --color-tooltip-surface: #fff;
-  --color-tooltip-text: #222;
-  --color-focus: #222;
-  --color-scrim: rgba(0, 0, 0, .5);
-  --shadow-card: rgba(0, 0, 0, .02) 0 0 0 1px, rgba(0, 0, 0, .04) 0 2px 6px, rgba(0, 0, 0, .1) 0 4px 8px;
-  --shadow-drawer: -8px 0 20px rgba(0, 0, 0, .08);
-  --color-chart-label: #94a3b8;
-  --color-chart-axis: #e9edf4;
-  --color-chart-grid: #edf0f5;
-  --color-chart-surface: #fff;
-  --color-chart-price: #dc4d5d;
-  --color-chart-deal: #536da4;
-}
-:global(:root[data-theme="dark"]) {
-  color-scheme: dark;
-  --color-canvas: #151515;
-  --color-surface: #1d1d1d;
-  --color-surface-soft: #242424;
-  --color-surface-strong: #2c2c2c;
-  --color-text-primary: #f5f5f5;
-  --color-text-secondary: #dedede;
-  --color-text-muted: #ababab;
-  --color-text-disabled: #777;
-  --color-border: #3b3b3b;
-  --color-border-soft: #2d2d2d;
-  --color-border-strong: #5a5a5a;
-  --color-accent: #ff5470;
-  --color-accent-hover: #ff7188;
-  --color-accent-disabled: #713847;
-  --color-on-accent: #fff;
-  --color-on-accent-disabled: #fff;
-  --color-error: #ff8a65;
-  --color-on-error: #151515;
-  --color-error-hover: #ffab91;
-  --color-error-surface: #3a211d;
-  --color-tag-surface: #3a2028;
-  --color-tooltip-surface: #2c2c2c;
-  --color-tooltip-text: #f5f5f5;
-  --color-focus: #fff;
-  --color-scrim: rgba(0, 0, 0, .68);
-  --shadow-card: rgba(255, 255, 255, .07) 0 0 0 1px, rgba(0, 0, 0, .28) 0 4px 12px;
-  --shadow-drawer: -8px 0 20px rgba(0, 0, 0, .28);
-  --color-chart-label: #aeb4c0;
-  --color-chart-axis: #3a414d;
-  --color-chart-grid: #343a45;
-  --color-chart-surface: #1d1d1d;
-  --color-chart-price: #ff6b83;
-  --color-chart-deal: #9eb7e8;
-}
-:global(body) { margin: 0; background: var(--color-canvas); color: var(--color-text-primary); font-family: "Airbnb Cereal VF", Circular, Inter, -apple-system, system-ui, Roboto, "Helvetica Neue", sans-serif; }
-:global(button), :global(input), :global(select) { font: inherit; }
-:global(button), :global(a) { -webkit-tap-highlight-color: transparent; }
 .page-shell { width: min(1280px, calc(100% - 64px)); margin: 0 auto; padding-bottom: 64px; }
 .top-nav { display: flex; align-items: center; justify-content: space-between; height: 80px; border-bottom: 1px solid var(--color-border-soft); }
 .brand, .product-tab, .search-bar, .search-field, .filter-row, .results-heading, .price-row, .card-meta, .pagination, .section-title, .drawer-price-row { display: flex; align-items: center; }
@@ -496,16 +421,16 @@ watch([category, sort], resetAndLoad)
 .admin-link:hover, .admin-link:focus-visible { color: var(--color-text-primary); text-decoration: underline; text-underline-offset: 4px; }
 .theme-toggle { display: grid; width: 40px; height: 40px; padding: 0; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
 .theme-toggle:hover, .theme-toggle:focus-visible { background: var(--color-surface-strong); box-shadow: var(--shadow-card); }
-.section-kicker, .drawer-kicker { margin: 0 0 12px; color: var(--color-accent); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; }
+.section-kicker, .drawer-kicker { margin: 0 0 12px; color: var(--color-text-muted); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; }
 .search-filter-row { display: flex; align-items: center; gap: 24px; width: 100%; margin: 48px auto 0; }
 .search-section { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 8px; }
-.search-bar { flex: 0 0 48px; height: 48px; padding: 0 6px 0 16px; border: 1px solid var(--color-border); border-radius: 9999px; background: var(--color-surface); box-shadow: var(--shadow-card); }
+.search-bar { flex: 0 0 64px; height: 64px; padding: 0 8px 0 20px; border: 1px solid var(--color-border); border-radius: 9999px; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .search-field { min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
 .search-field-main { flex: 1; }
 .search-field input { width: 100%; padding: 0; overflow: hidden; border: 0; outline: 0; background: transparent; color: var(--color-text-muted); font-size: 14px; line-height: 1.43; text-overflow: ellipsis; white-space: nowrap; }
 .search-field input:focus { color: var(--color-text-primary); }
 .search-field input::placeholder { color: var(--color-text-disabled); opacity: 1; }
-.search-orb { display: grid; flex: 0 0 40px; width: 40px; height: 40px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent); cursor: pointer; }
+.search-orb { display: grid; flex: 0 0 48px; width: 48px; height: 48px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent); cursor: pointer; }
 .search-orb:hover, .search-orb:focus-visible { background: var(--color-accent-hover); }
 .search-orb:active { background: var(--color-accent-hover); }
 .search-orb:disabled { background: var(--color-accent-disabled); color: var(--color-on-accent-disabled); cursor: not-allowed; }
@@ -534,7 +459,8 @@ watch([category, sort], resetAndLoad)
 .card-body { padding: 16px; }
 .card-body h3 { display: -webkit-box; min-height: 40px; margin: 0 0 10px; overflow: hidden; color: var(--color-text-primary); font-size: 16px; font-weight: 600; line-height: 1.25; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .price-row { gap: 8px; }
-.price-row strong, .drawer-price-row strong { color: var(--color-accent); font-size: 20px; font-weight: 600; line-height: 1.25; }
+.price-row strong { color: var(--color-accent); font-size: 16px; font-weight: 600; line-height: 1.25; }
+.drawer-price-row strong { color: var(--color-accent); font-size: 22px; font-weight: 600; line-height: 1.25; }
 .reference { color: var(--color-text-disabled); font-size: 12px; text-decoration: line-through; }
 .price-discount { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 9999px; background: var(--color-tag-surface); color: var(--color-accent); font-size: 11px; font-weight: 600; line-height: 1.18; }
 .card-meta { justify-content: space-between; min-height: 28px; margin-top: 8px; }
@@ -601,8 +527,8 @@ watch([category, sort], resetAndLoad)
   .top-nav { height: 64px; }
   .brand-name, .product-nav { display: none; }
   .search-filter-row { display: block; margin-top: 32px; }
-  .search-bar { height: 48px; padding-left: 18px; }
-  .search-orb { flex-basis: 40px; width: 40px; height: 40px; font-size: 24px; }
+  .search-bar { height: 56px; padding-left: 20px; }
+  .search-orb { flex-basis: 48px; width: 48px; height: 48px; }
   .filter-row { align-items: stretch; flex-direction: column; gap: 16px; margin-top: 16px; }
   .category-filter { width: 100%; flex-basis: auto; }
   .sort-filter { flex: none; }
@@ -625,7 +551,6 @@ watch([category, sort], resetAndLoad)
   .drawer h2 { font-size: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  :global(html) { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 </style>

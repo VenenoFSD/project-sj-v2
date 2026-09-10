@@ -1,0 +1,117 @@
+:root {
+  color-scheme: light;
+
+  --color-canvas: #fff;
+  --color-surface: #fff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-strong: #f2f2f2;
+
+  --color-text-primary: #222;
+  --color-text-secondary: #3f3f3f;
+  --color-text-muted: #6a6a6a;
+  --color-text-disabled: #929292;
+
+  --color-border: #ddd;
+  --color-border-soft: #ebebeb;
+  --color-border-strong: #c1c1c1;
+
+  --color-accent: #ff385c;
+  --color-accent-hover: #e00b41;
+  --color-accent-disabled: #ffd1da;
+  --color-on-accent: #fff;
+  --color-on-accent-disabled: #fff;
+
+  --color-error: #c13515;
+  --color-on-error: #fff;
+  --color-error-hover: #b32505;
+  --color-error-surface: #fff4f2;
+
+  --color-tag-surface: #fff0f2;
+  --color-tooltip-surface: #fff;
+  --color-tooltip-text: #222;
+
+  --color-focus: #222;
+  --color-scrim: rgba(0, 0, 0, .5);
+
+  --shadow-card: rgba(0, 0, 0, .02) 0 0 0 1px, rgba(0, 0, 0, .04) 0 2px 6px, rgba(0, 0, 0, .1) 0 4px 8px;
+  --shadow-drawer: -8px 0 20px rgba(0, 0, 0, .08);
+
+  --color-chart-label: #94a3b8;
+  --color-chart-axis: #e9edf4;
+  --color-chart-grid: #edf0f5;
+  --color-chart-surface: #fff;
+  --color-chart-price: #dc4d5d;
+  --color-chart-deal: #536da4;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-canvas: #151515;
+  --color-surface: #1d1d1d;
+  --color-surface-soft: #242424;
+  --color-surface-strong: #2c2c2c;
+
+  --color-text-primary: #f5f5f5;
+  --color-text-secondary: #dedede;
+  --color-text-muted: #ababab;
+  --color-text-disabled: #777;
+
+  --color-border: #3b3b3b;
+  --color-border-soft: #2d2d2d;
+  --color-border-strong: #5a5a5a;
+
+  --color-accent: #ff5470;
+  --color-accent-hover: #ff7188;
+  --color-accent-disabled: #713847;
+  --color-on-accent: #fff;
+  --color-on-accent-disabled: #fff;
+
+  --color-error: #ff8a65;
+  --color-on-error: #151515;
+  --color-error-hover: #ffab91;
+  --color-error-surface: #3a211d;
+
+  --color-tag-surface: #3a2028;
+  --color-tooltip-surface: #2c2c2c;
+  --color-tooltip-text: #f5f5f5;
+
+  --color-focus: #fff;
+  --color-scrim: rgba(0, 0, 0, .68);
+
+  --shadow-card: rgba(255, 255, 255, .07) 0 0 0 1px, rgba(0, 0, 0, .28) 0 4px 12px;
+  --shadow-drawer: -8px 0 20px rgba(0, 0, 0, .28);
+
+  --color-chart-label: #aeb4c0;
+  --color-chart-axis: #3a414d;
+  --color-chart-grid: #343a45;
+  --color-chart-surface: #1d1d1d;
+  --color-chart-price: #ff6b83;
+  --color-chart-deal: #9eb7e8;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+  font-family: "Airbnb Cereal VF", Circular, Inter, -apple-system, system-ui, Roboto, "Helvetica Neue", sans-serif;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

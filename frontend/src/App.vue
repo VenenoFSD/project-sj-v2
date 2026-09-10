@@ -6,6 +6,3 @@
   </RouterView>
 </template>
 
-<style>
-html { scrollbar-gutter: stable; }
-</style>

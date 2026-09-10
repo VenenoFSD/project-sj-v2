@@ -5,6 +5,7 @@ import { CalendarClock, Check, Clock3, Edit3, LoaderCircle, Moon, Play, Plus, Po
 import { getCrawlTask, startCrawl } from '../api/crawl'
 import { createSchedule, deleteSchedule, listSchedules, runSchedule, updateSchedule } from '../api/schedules'
 import BaseSelect from '../components/BaseSelect.vue'
+import AppFooter from '../components/AppFooter.vue'
 
 defineOptions({ name: 'BackendView' })
 
@@ -608,6 +609,7 @@ onBeforeUnmount(() => {
       </section>
     </section>
 
+    <AppFooter />
     <Teleport to="body">
       <div v-if="scheduleModalOpen" class="modal-backdrop" role="presentation" @click.self="closeScheduleModal">
         <section class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
@@ -633,60 +635,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-:global(*) { box-sizing: border-box; }
-:global(:root) {
-  color-scheme: light;
-  --color-canvas: #fff;
-  --color-surface: #fff;
-  --color-surface-soft: #f7f7f7;
-  --color-surface-strong: #f2f2f2;
-  --color-text-primary: #222;
-  --color-text-secondary: #3f3f3f;
-  --color-text-muted: #6a6a6a;
-  --color-text-disabled: #929292;
-  --color-border: #ddd;
-  --color-border-soft: #ebebeb;
-  --color-border-strong: #c1c1c1;
-  --color-accent: #ff385c;
-  --color-accent-hover: #e00b41;
-  --color-accent-disabled: #ffd1da;
-  --color-on-accent: #fff;
-  --color-on-accent-disabled: #fff;
-  --color-error: #c13515;
-  --color-error-surface: #fff4f2;
-  --color-tag-surface: #fff0f2;
-  --color-scrim: rgba(0, 0, 0, .5);
-  --color-focus: #222;
-  --shadow-card: rgba(0, 0, 0, .02) 0 0 0 1px, rgba(0, 0, 0, .04) 0 2px 6px, rgba(0, 0, 0, .1) 0 4px 8px;
-}
-:global(:root[data-theme="dark"]) {
-  color-scheme: dark;
-  --color-canvas: #151515;
-  --color-surface: #1d1d1d;
-  --color-surface-soft: #242424;
-  --color-surface-strong: #2c2c2c;
-  --color-text-primary: #f5f5f5;
-  --color-text-secondary: #dedede;
-  --color-text-muted: #ababab;
-  --color-text-disabled: #777;
-  --color-border: #3b3b3b;
-  --color-border-soft: #2d2d2d;
-  --color-border-strong: #5a5a5a;
-  --color-accent: #ff5470;
-  --color-accent-hover: #ff7188;
-  --color-accent-disabled: #713847;
-  --color-on-accent: #fff;
-  --color-on-accent-disabled: #fff;
-  --color-error: #ff8a65;
-  --color-error-surface: #3a211d;
-  --color-tag-surface: #3a2028;
-  --color-scrim: rgba(0, 0, 0, .68);
-  --color-focus: #fff;
-  --shadow-card: rgba(255, 255, 255, .07) 0 0 0 1px, rgba(0, 0, 0, .28) 0 4px 12px;
-}
-:global(body) { margin: 0; background: var(--color-canvas); color: var(--color-text-primary); font-family: "Airbnb Cereal VF", Circular, Inter, -apple-system, system-ui, Roboto, "Helvetica Neue", sans-serif; }
-:global(button), :global(input), :global(select) { font: inherit; }
-:global(button), :global(a) { -webkit-tap-highlight-color: transparent; }
 .backend-page { width: min(1280px, calc(100% - 64px)); margin: 0 auto; padding-bottom: 64px; }
 .backend-nav { position: relative; display: flex; align-items: center; justify-content: center; height: 80px; border-bottom: 1px solid var(--color-border-soft); }
 .brand { position: absolute; left: 0; display: flex; align-items: center; gap: 9px; color: var(--color-text-primary); font-size: 16px; font-weight: 600; text-decoration: none; }
@@ -704,8 +652,8 @@ onBeforeUnmount(() => {
 .theme-toggle { display: grid; width: 40px; height: 40px; padding: 0; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
 .theme-toggle:hover, .theme-toggle:focus-visible { background: var(--color-surface-strong); box-shadow: var(--shadow-card); }
 .backend-intro { padding: 64px 0 40px; }
-.section-kicker { margin: 0 0 8px; color: var(--color-accent); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; }
-.backend-intro h1 { margin: 0; color: var(--color-text-primary); font-size: 36px; font-weight: 600; letter-spacing: -.6px; line-height: 1.2; }
+.section-kicker { margin: 0 0 8px; color: var(--color-text-muted); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; }
+.backend-intro h1 { margin: 0; color: var(--color-text-primary); font-size: 28px; font-weight: 700; line-height: 1.43; }
 .backend-intro > p:last-child { margin: 12px 0 0; color: var(--color-text-muted); font-size: 15px; line-height: 1.5; }
 .backend-sections { display: grid; gap: 24px; }
 .control-card, .status-card { padding: 32px; border: 1px solid var(--color-border-soft); border-radius: 14px; background: var(--color-surface); }
@@ -732,7 +680,7 @@ onBeforeUnmount(() => {
 .secondary-button:hover, .secondary-button:focus-visible { background: var(--color-surface-strong); }
 .secondary-button:disabled { border-color: var(--color-border); color: var(--color-text-disabled); cursor: not-allowed; }
 .error-message { margin: 0 0 24px; padding: 12px 14px; border-radius: 8px; background: var(--color-error-surface); color: var(--color-error); font-size: 13px; }
-.notice-message { display: flex; align-items: center; gap: 8px; margin: 0 0 24px; padding: 12px 14px; border-radius: 8px; background: var(--color-tag-surface, var(--color-surface-soft)); color: var(--color-text-secondary); font-size: 13px; }
+.notice-message { display: flex; align-items: center; gap: 8px; margin: 0 0 24px; padding: 12px 14px; border-radius: 8px; background: var(--color-tag-surface); color: var(--color-text-secondary); font-size: 13px; }
 .status-empty { display: flex; min-height: 180px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--color-text-muted); text-align: center; }
 .empty-mark { display: grid; width: 42px; height: 42px; margin-bottom: 4px; place-items: center; border-radius: 50%; background: var(--color-surface-strong); color: var(--color-text-disabled); font-size: 24px; }
 .status-empty strong { color: var(--color-text-primary); font-size: 16px; font-weight: 600; }
@@ -807,7 +755,7 @@ onBeforeUnmount(() => {
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .spin-icon { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; padding: 24px; place-items: center; background: color-mix(in srgb, var(--color-scrim, #000) 50%, transparent); }
+.modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; padding: 24px; place-items: center; background: color-mix(in srgb, var(--color-scrim) 50%, transparent); }
 .schedule-modal { width: min(680px, 100%); max-height: min(760px, calc(100vh - 48px)); padding: 32px; overflow: auto; border: 1px solid var(--color-border-soft); border-radius: 14px; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
 .modal-heading h2 { margin: 0; color: var(--color-text-primary); font-size: 22px; font-weight: 500; letter-spacing: -.44px; line-height: 1.2; }
@@ -834,7 +782,7 @@ onBeforeUnmount(() => {
   .backend-page-tab { font-size: 13px; }
   .backend-nav-actions { gap: 0; }
   .backend-intro { padding: 48px 0 32px; }
-  .backend-intro h1 { font-size: 30px; }
+  .backend-intro h1 { font-size: 24px; }
   .control-card, .status-card { padding: 24px 20px; }
   .crawl-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .form-actions { align-items: stretch; flex-direction: column; }
