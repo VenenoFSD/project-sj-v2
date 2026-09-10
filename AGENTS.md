@@ -77,7 +77,7 @@ Do not delete or recreate the database as part of normal code changes unless exp
 * `--detail` collects details for every product returned in a run; large runs can be slow and more likely to hit rate limits.
 * Detail, deal and price-point APIs only return data previously persisted by a crawler run using `--detail`.
 * The frontend is still the default Vue scaffold and has not been connected to the API.
-* Automated tests, authentication, scheduled crawling and API-triggered crawling are not implemented yet.
+* Automated tests and authentication are not implemented yet.
 
 ## Documentation
 
@@ -85,3 +85,8 @@ Do not delete or recreate the database as part of normal code changes unless exp
 * `docs/crawler.md` — all crawler CLI parameters and behavior
 * `docs/runbook.md` — environment and run commands
 * `docs/progress.md` — current project status and remaining work
+
+## Verification
+
+* Python execution is unavailable in the current restricted sandbox. Do not run `python`, `py`, or Python-based validation commands here.
+* For Python changes, provide the exact verification commands for the user to run locally; use non-Python static checks in the sandbox where appropriate.

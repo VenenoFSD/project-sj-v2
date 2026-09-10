@@ -1,21 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.database.repositories import list_crawl_runs
 from backend.database.session import get_db
 from backend.services import crawl_service
+from backend.api.schemas import CrawlParams
 
 router = APIRouter(prefix="/crawl-runs", tags=["crawl-runs"])
 
 
-class CrawlRequest(BaseModel):
-    pages: int = Field(0, ge=0, le=500)
-    category: str | None = "898"
-    ip: str | None = None
-    sort: str = Field("hot", pattern="^(hot|mostListings|priceFirst)$")
-    detail: bool = False
-    no_alert: bool = False
+class CrawlRequest(CrawlParams):
+    pass
 
 
 @router.post("")

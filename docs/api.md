@@ -60,6 +60,32 @@ GET /api/crawl-runs/tasks/{task_id}
 
 接口实际响应结构以 Swagger/OpenAPI 为准；新增或修改接口时同步更新本文档。
 
+### `POST /api/schedules`
+
+创建 interval 定时爬取任务。`interval_seconds` 范围为 60-2592000 秒，`crawl_params` 复用爬虫参数：`pages`、`category`、`ip`、`sort`、`detail` 和 `no_alert`。创建后任务默认启用。
+
+### `GET /api/schedules`
+
+查询全部定时任务，返回 `items`。每项包含配置、`enabled`、`last_status`、`last_error`、`last_run_at`、`last_finished_at` 和 `next_run_at`。
+
+### `GET /api/schedules/{schedule_id}`
+
+查询单个定时任务详情。不存在时返回 `404`。
+
+### `PATCH /api/schedules/{schedule_id}`
+
+更新任务名称、间隔、爬虫参数或 `enabled` 状态。未传入的字段保持不变；不存在时返回 `404`。
+
+### `POST /api/schedules/{schedule_id}/run`
+
+立即触发一次任务，不改变原有定时周期。任务已禁用或当前已有其他爬取任务运行时返回 `409`。
+
+### `DELETE /api/schedules/{schedule_id}`
+
+删除定时任务并移除对应调度 job。成功返回 `204`。
+
+定时任务状态取值包括：`running`（已启动）、`success`（执行成功）、`failed`（爬虫进程失败）、`skipped`（已有任务运行而跳过）和 `error`（启动或配置错误）。
+
 ### `GET /api/catalog/{filter_type}`
 
 查询已抓取的筛选维度。`filter_type` 支持 `category`、`ip`、`sort`。

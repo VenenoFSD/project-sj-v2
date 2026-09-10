@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, aliased
 
 from datetime import datetime
 import json
-from backend.database.models import CrawlRun, Product, ProductSnapshot, Favorite, ProductDeal, ProductPricePoint
+from backend.database.models import CrawlRun, Product, ProductSnapshot, Favorite, ProductDeal, ProductPricePoint, ScheduledCrawl
 
 
 def list_products(db: Session, category: str | None, search: str | None, sort: str | None, limit: int, offset: int):
@@ -64,6 +64,68 @@ def get_latest_snapshot(db: Session, product_id: int):
 def list_crawl_runs(db: Session, limit: int, offset: int):
     query = select(CrawlRun).order_by(desc(CrawlRun.started_at)).limit(limit).offset(offset)
     return list(db.scalars(query))
+
+def create_scheduled_crawl(db: Session, *, name: str | None, interval_seconds: int, crawl_params: str, created_at: str):
+    schedule = ScheduledCrawl(
+        name=name,
+        enabled=True,
+        interval_seconds=interval_seconds,
+        crawl_params=crawl_params,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    db.add(schedule)
+    db.flush()
+    return schedule
+
+def get_scheduled_crawl(db: Session, schedule_id: int):
+    return db.get(ScheduledCrawl, schedule_id)
+
+def list_scheduled_crawls(db: Session):
+    return list(db.scalars(select(ScheduledCrawl).order_by(ScheduledCrawl.id.asc())))
+
+def list_enabled_scheduled_crawls(db: Session):
+    return list(db.scalars(select(ScheduledCrawl).where(ScheduledCrawl.enabled.is_(True)).order_by(ScheduledCrawl.id.asc())))
+
+def update_scheduled_crawl(db: Session, schedule_id: int, *, updated_at: str, **fields):
+    schedule = get_scheduled_crawl(db, schedule_id)
+    if schedule is None:
+        return None
+    for field, value in fields.items():
+        setattr(schedule, field, value)
+    schedule.updated_at = updated_at
+    db.flush()
+    return schedule
+
+def delete_scheduled_crawl(db: Session, schedule_id: int):
+    schedule = get_scheduled_crawl(db, schedule_id)
+    if schedule is None:
+        return False
+    db.delete(schedule)
+    db.flush()
+    return True
+
+_UNSET = object()
+
+def update_scheduled_crawl_run(db: Session, schedule_id: int, *, expected_task_id=_UNSET, last_run_at=_UNSET, last_task_id=_UNSET, last_status=_UNSET, last_error=_UNSET, last_finished_at=_UNSET, next_run_at=_UNSET):
+    schedule = get_scheduled_crawl(db, schedule_id)
+    if schedule is None:
+        return None
+    if expected_task_id is not _UNSET and schedule.last_task_id != expected_task_id:
+        return None
+    fields = {
+        "last_run_at": last_run_at,
+        "last_task_id": last_task_id,
+        "last_status": last_status,
+        "last_error": last_error,
+        "last_finished_at": last_finished_at,
+        "next_run_at": next_run_at,
+    }
+    for field, value in fields.items():
+        if value is not _UNSET:
+            setattr(schedule, field, value)
+    db.flush()
+    return schedule
 
 def list_json_rows(db: Session, model, product_id: int, limit: int):
     rows = db.scalars(select(model).where(model.product_id == product_id).order_by(desc(model.captured_at), desc(model.id)).limit(limit))

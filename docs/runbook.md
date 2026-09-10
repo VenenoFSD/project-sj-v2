@@ -86,7 +86,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/crawl-runs?limit=20"
 3. 启动 FastAPI 后端。
 4. 通过 `/docs` 或前端调用查询接口。
 
-爬虫是长耗时任务，建议在独立终端运行；后端启动后不会自动执行爬取。
+爬虫是长耗时任务，建议在独立终端运行；后端只有存在启用的定时任务时才会自动执行爬取。
 
 每次爬虫执行都会在 `logs/` 下生成独立日志文件，查看最近一次日志：
 
@@ -109,3 +109,33 @@ Invoke-RestMethod -Method Post `
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/api/crawl-runs/tasks/{task_id}
 ```
+
+## 定时爬取任务
+
+定时任务由 FastAPI 进程内的 APScheduler 管理。当前部署应使用单个 worker，避免多个进程重复注册并执行同一个任务：
+
+```powershell
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+创建一个每 10 分钟执行一次的任务：
+
+```powershell
+$body = @{
+  name = "默认商品巡检"
+  interval_seconds = 600
+  crawl_params = @{
+    pages = 1
+    category = "898"
+    ip = $null
+    sort = "hot"
+    detail = $false
+    no_alert = $false
+  }
+} | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:8000/api/schedules" -Method Post -ContentType "application/json" -Body $body
+```
+
+使用 `GET /api/schedules` 或 `GET /api/schedules/{schedule_id}` 查看 `enabled`、`last_status`、`last_error`、`last_run_at`、`last_finished_at` 和 `next_run_at`。前端可使用 `POST /api/schedules/{schedule_id}/run` 立即触发一次，使用 `PATCH` 修改或启停任务，使用 `DELETE` 删除任务。
+
+后端关闭时会停止调度器并终止仍在运行的爬虫子进程；关键调度、启动、跳过、完成、异常和生命周期事件写入后端日志。
