@@ -37,3 +37,10 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Transient atomic-write leftovers (editor save handlers, agent file tools).
+# These appear next to the file being written and are deleted immediately; ignoring them
+# keeps them out of git and out of the dev-server watcher (see vite.config.js).
+.*.tmpdir/
+*.tmp
+*.crswap

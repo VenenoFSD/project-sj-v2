@@ -334,6 +334,8 @@ Type runs **Airbnb Cereal VF** (a custom variable font Airbnb licenses), with **
 
 The shape language is **soft**. Buttons are 8px radius (`{rounded.sm}`), property cards are ~14px (`{rounded.md}`), the search bar is fully pill-shaped (`{rounded.full}`), wishlist hearts and search orbs are circles (`{rounded.full}`), and category strip rounded corners run at 32px (`{rounded.xl}`). There is essentially no hard corner anywhere except the body grid itself — every interactive element is rounded.
 
+`{rounded.xs}` (4px) is the smallest step and is reserved for one situation: a control nested inside an already-rounded container that is itself sitting in a panel (a row inside a dropdown, a chip inside a card), where a 14px or pill radius would read as a second competing shape. It is not a general-purpose small radius and it is never used for a status or discount tag — tags are pills at `{rounded.full}`. In this product the nested-control case resolves to `{rounded.sm}` (8px) rather than `{rounded.xs}`, so 4px currently has no consumer; a dropdown row uses an 8px radius inside its 8px menu so the nesting reads as concentric.
+
 **Key Characteristics:**
 - Single accent color: `{colors.primary}` (#ff385c — "Rausch") carries every primary CTA, the search orb, the heart save state, and the brand wordmark. Used scarcely — most pages are 90% white + ink with one or two Rausch moments.
 - Custom variable type: `Airbnb Cereal VF`. Display weights sit at 500–700, body at 400. Modest weight is intentional — the system trusts photography for visual heft.
@@ -412,6 +414,8 @@ There is no separate display family. The variable font carries the entire scale.
 ### Principles
 Display weights stay modest. The homepage h1 at 28px / 700 is deliberately small — it tucks under the search bar so photography and the city-link grid carry visual hierarchy. The listing-detail h1 at 22px / 500 is even quieter; the listing photo banner does the work above it.
 
+Weight 700 is reserved for the `{typography.display-xl}` page heading and for uppercase micro-labels, where the letterspacing needs the extra stem weight. Everything else sits at 400/500/600: section headings take `{typography.display-lg}` at 500, sub-section titles and card titles at 600, and the wordmark's circular mark at 600 rather than 700 so it does not out-shout the page heading beside it.
+
 The single typographically loud moment in the entire system is the **rating display** (`{typography.rating-display}` — 64px / 700) on listing pages. That is the only place the system trusts type alone to carry hierarchy — rating numbers are a peak trust signal, so they get the loudest treatment.
 
 ### Note on Font Substitutes
@@ -445,6 +449,8 @@ The system has essentially **one shadow tier** plus the flat baseline.
 
 There are no progressive elevation tiers — the system either has the one shadow or none. Depth comes from photography, the white-on-white surface separation, and rounded-corner clipping rather than from layered shadows.
 
+**Documented exception — edge-anchored overlays.** Because the card shadow is radially symmetric, it reads as a faint halo on a full-height panel that is flush to the viewport edge, so the right-hand detail Drawer and the schedule modal use a dedicated edge shadow instead: `--shadow-drawer` — `-8px 0 20px rgba(0,0,0,.08)` in Light Mode, `rgba(0,0,0,.28)` in Dark Theme. This is the only second shadow value in the system, it applies to overlays only, and it never replaces the card shadow on hover-floated surfaces.
+
 ## Components
 
 ### Buttons
@@ -463,9 +469,20 @@ There are no progressive elevation tiers — the system either has the one shado
 
 ### Search Surface
 
-**`search-bar-pill`** — The signature global search bar. White fill, 9999px radius, 64px height, 1px hairline 1px-shadow border. Internally divided by vertical hairline rules into `{component.search-field-segment}` cells (Where / When / Who). Each segment holds an uppercase caption label above a placeholder line in `{typography.caption}`.
+**`search-bar-pill`** — The signature global search bar. White fill, 9999px radius, 64px height, 1px hairline border supplied by the shadow tier. Internally divided by vertical hairline rules into `{component.search-field-segment}` cells (Where / When / Who). Each segment holds an uppercase caption label above a placeholder line in `{typography.caption}`.
 
 **`search-orb`** — The circular Rausch orb terminating the right edge of the search bar. 48×48px, fully rounded, white magnifying-glass icon centered. The hottest single color moment on the homepage.
+
+**Search pill states.** The pill — not the text entry inside it — is the interactive control, so every state change happens on the pill's own border and never on the inner input:
+
+- **Rest:** a `2px` transparent border holding the space its focus state needs, plus the 1px hairline and shadow from the shadow tier. Focus feedback on a pill cannot be an outline: a concentric outline cannot share a `{rounded.full}` radius and would read as a double border.
+- **Hover (anywhere on the pill):** the border color steps to `{colors.borderStrong}`.
+- **Text-entry focus (pointer or keyboard):** the same border recolors to `{colors.ink}`.
+- **Orb focus (keyboard only):** the orb is a button on a Rausch fill, where an `{colors.ink}` outline would be nearly invisible, so it takes a `2px` `{colors.on-primary}` inset ring (`outline-offset: -4px`) instead. The orb's pointer and focus states both use the Rausch active fill. Focusing the orb does not alter the pill, so the two rings never appear at once.
+
+The mechanics of reserving the border, and why it must never be redrawn on focus, are specified once under `{component.text-input}` — that rule governs the pill as well. Two consequences are specific to the pill: its inset is `{spacing.lg}` (20px) minus 1px on both sides, so the distance from the pill's outer edge to the text is 21px in every state (19px padding + the 2px reserved border, matching the 1px hairline plus 20px padding it replaces); and the orb keeps its diameter in every state, leaving its right edge 8px from the pill's outer edge whether or not the border is inked.
+
+The inner input is permanently borderless and outline-less: it must not draw a second box inside the pill.
 
 ### Top Navigation
 
@@ -481,7 +498,7 @@ There are no progressive elevation tiers — the system either has the one shado
 
 **`property-card`** — A photo-first card. 1:1 aspect-ratio image with `{rounded.md}` corner clipping, image carousel dots overlay, "Guest favorite" floating badge top-left (`{component.guest-favorite-badge}`), and a heart icon top-right (`{component.icon-button-circle}` in default outlined state, Rausch-filled when saved). Beneath the image: 4–5 lines of meta — title (`{typography.title-md}`), distance / dates (`{typography.body-sm}` muted), and price ("$X night") right-aligned.
 
-**`property-card-photo`** — The photo plate itself, separated as a token because some surfaces (wishlist, search results) reuse just the photo without the meta block.
+**`property-card-photo`** — The photo plate itself, separated as a token because some surfaces (wishlist, search results) reuse just the photo without the meta block. On card hover the plate's image scales to `1.03` over `250ms`; the plate keeps `{rounded.md}` clipping and `{colors.surface-soft}` as its placeholder fill. The zoom is the only transform used for pointer feedback in the system.
 
 **`experience-card`** — A taller-aspect card (4:5) for experience listings. Same `{rounded.md}` clipping, floating "NEW" badge top-left, heart top-right, and a single-line title beneath.
 
@@ -507,7 +524,21 @@ There are no progressive elevation tiers — the system either has the one shado
 
 ### Forms
 
-**`text-input`** — White surface, 1px hairline outline, `{rounded.sm}` 8px radius, 56px height, 14×12px padding. Stacked label above (in `{typography.caption}` muted), placeholder text in `{typography.body-md}` muted. On focus, the border thickens to 2px ink and the border color flips to `{colors.ink}` — no glow, no ring.
+**`text-input`** — White surface, 1px hairline outline, `{rounded.sm}` 8px radius, 56px height, 14×12px padding. Stacked label above (in `{typography.caption}` muted), placeholder text in `{typography.body-md}` muted. On focus, the resting hairline is replaced by a 2px border in `--color-focus` (which is `{colors.ink}` in Light Mode and the near-white token in Dark Theme) — no glow, no ring. Note that the component token above describes the upstream 56px editorial build; this product's dense forms use the 48px variant described below.
+
+**Focus must not move anything.** The control reserves its focus border at all times: the border is `2px solid transparent` from the start and the resting hairline is drawn as an inset `box-shadow` in `{colors.hairline}`. The white surface fills the transparent border (`background-clip` defaults to `border-box`), so at rest the control looks exactly like a 1px-outlined one. Focus then only recolors the border to `{colors.ink}` — the Light Mode value of `--color-focus` — and drops the inset shadow, so it never changes a border width, a padding or a size: the value, the placeholder, the caret and any trailing affordance (a select chevron, the search orb) stay pixel-identical.
+
+What matters for the layout is the *distance from the control's outer edge to the text*, and that is unchanged: the resting hairline is 1px and the inset padding compensates for the reserved border, so the visible inset is still `{spacing.md}` (12px) plus that 1px in every state.
+
+This is the single rule for every focusable control in the product — the editorial `text-input`, the 48px application inputs, the `{component.search-bar-pill}` and the select trigger. Changing a border width on focus is never acceptable, because `box-sizing: border-box` fixes the outer size and the content box absorbs the whole difference.
+
+Applied to the pill, this means its border is `2px solid transparent` at rest (with the surface filling it) rather than the 1px hairline of a plain input, which is why the pill carries its own note about insets.
+
+In dense application forms (the backend task and schedule forms, the search filter row) the same control is built at 48px height with `{typography.body-sm}` text and a `{spacing.md}` horizontal inset, so that a 4-column grid stays readable. The 56px editorial height is reserved for single-column forms. Both heights share the identical border, radius, placeholder and focus treatment.
+
+The form label is `{typography.caption-sm}` at weight 600 in `{colors.ink}`, and the helper line beneath the control is `{typography.caption-sm}` in `{colors.muted-soft}`.
+
+**Input error state.** The extracted analysis left this open, so this product fixes it: a field in error keeps its 2px focus border width but flips the color to `--color-error`, the helper line beneath is replaced by the error message in `--color-error` at `{typography.caption-sm}`, and nothing moves. Form-level failures (a rejected request, a failed crawl task) use `--color-error-surface` with `--color-error` text at `{rounded.sm}` and `12px 16px` padding; a form-level success confirmation uses `--color-success-surface` with `--color-success` text and the same geometry. Error and success surfaces never appear on the same form at once.
 
 ### Footer
 
@@ -543,6 +574,8 @@ There are no progressive elevation tiers — the system either has the one shado
 - **Map view styling:** the search-results map uses Mapbox-tinted tiles with custom Rausch markers; not captured here.
 - **Form input error states:** error text color (`{colors.primary-error-text}`) is documented, but the full input outline + helper-text combination on validation failure was not visible in the captured surfaces.
 - **Sub-brand palettes:** Luxe (`{colors.luxe}`) and Plus (`{colors.plus}`) are documented as tokens, but their full sub-system (typography overrides, surface treatment) lives on separate sub-domains and is not captured here.
+
+The hover gap is closed for this product rather than left open: pointer hover on an interactive surface applies the card shadow tier (`--shadow-card`) and, for photo cards only, the documented `1.03` image zoom. No hover state introduces a new color, a new surface, or a new shadow value, and no hover state changes layout. Every interactive element also carries a keyboard `:focus-visible` treatment at least as visible as its hover state.
 
 ## Project Theme Extension
 
@@ -582,13 +615,71 @@ The application uses semantic CSS variables and applies the active theme to the 
 | `--color-focus` | `#222222` | `#ffffff` | Keyboard focus outline |
 | `--color-scrim` | `rgba(0,0,0,.5)` | `rgba(0,0,0,.68)` | Drawer and modal backdrop |
 
+`--color-success` is the only status color the product adds to the shared token set. It exists because task and schedule status need a completed / healthy signal that Rausch cannot express; it is never used for actions or decoration. Unlike the tokens in the table above, it is not a Light/Dark adaptation of an extracted value — it is new, and it is specified with its status family below.
+
+### Status Tokens
+
+Status appears in two strengths: a foreground tone for text and dots, and a surface tone for a band or pill carrying that status. The semantic status colors are the ones added on top of the shared theme set — `--color-success` / `--color-success-surface` are the only pair that is new, and both values keep success text at or above 4.5:1 against `--color-surface` (`#0b7a4b` on `#ffffff`, `#5fd39c` on `#1d1d1d`).
+
+| Status | Foreground | Surface |
+|---|---|---|
+| running | `--color-accent` | `--color-tag-surface` |
+| success | `--color-success` | `--color-success-surface` |
+| error | `--color-error` | `--color-error-surface` |
+| pending / skipped | `--color-text-disabled` | `--color-surface-soft` |
+
+The status dot is always `8px` and always accompanied by a text label, so status is never carried by color alone. The running dot is the one place a translucent ring is allowed — `color-mix(in srgb, var(--color-accent) 16%, transparent)` at a `4px` spread — because a static dot cannot convey "in progress"; it is a status indicator, not a surface elevation, so it does not violate the single-shadow-tier rule. Indeterminate spinners use `--duration-spin` and must not animate anything else.
+
+### Type, Motion and Spacing Tokens
+
+Theme-aware CSS lives in `frontend/src/styles/theme.css`. So that no component author has to guess, the documented type scale is also published as size tokens; components reference `var(--fs-*)` instead of writing raw pixel values.
+
+| Token | Value | Documented as |
+|---|---|---|
+| `--fs-11` | `11px` | `{typography.badge}` (600) — the uppercase section kicker reuses this size at micro-label weight (700) |
+| `--fs-12` | `12px` | `{typography.micro-label}` |
+| `--fs-13` | `13px` | `{typography.caption-sm}` |
+| `--fs-14` | `14px` | `{typography.body-sm}` / `{typography.caption}` / `{typography.link}` / `{typography.button-sm}` |
+| `--fs-16` | `16px` | `{typography.body-md}` / `{typography.title-md}` / `{typography.title-sm}` / `{typography.nav-link}` / `{typography.button-md}` |
+| `--fs-20` | `20px` | `{typography.display-sm}` |
+| `--fs-22` | `22px` | `{typography.display-lg}` |
+| `--fs-28` | `28px` | `{typography.display-xl}` |
+
+Values above 20px are display tokens and are reserved for page and section headings. Every pixel size in the component set maps to one of these tokens; no component writes a raw `font-size`. Responsive steps also live in the token layer: at `744px` the display tokens drop to `--fs-28: 22px` and `--fs-22: 20px`, and at `420px` `--fs-22` drops to `16px`, so a heading never has to redefine its own size in a media query.
+
+`--fs-13` is the one addition to the extracted scale. The extracted table uses `{typography.caption-sm}` for the footer legal line only, but this product leans on that size throughout its dense application surfaces (form labels, table cells, helper text, status rows), so it is promoted to a first-class token rather than replaced with 14px everywhere. The uppercase section kicker takes the `--fs-11` size instead of introducing a smaller step of its own: below 11px the 1.2px tracking stops reading as deliberate letterspacing and starts reading as broken word spacing.
+
+Motion is tokenised for the same reason, and because the extracted analysis has no motion table at all:
+
+| Token | Value | Applied to |
+|---|---|---|
+| `--duration-fast` | `.15s` | Color-only feedback: border, background, row highlight |
+| `--duration-base` | `.2s` | Transforms and small rotations (`.select-trigger` chevron, card image zoom) |
+| `--duration-drawer` | `.22s` | Panel entrance: the detail Drawer and the schedule modal |
+| `--duration-spin` | `1s` | Indeterminate spinners |
+| `--duration-shimmer` | `1.4s` | Skeleton shimmer loop |
+| `--ease-standard` | `ease` | All state feedback |
+| `--ease-entrance` | `ease-out` | Elements entering the viewport |
+
+A component must not invent a duration outside this table. Both keyframes (`spin`, `shimmer`) are declared per component because Vue scopes `@keyframes` names; the two `spin` declarations are byte-identical and are expected to stay that way.
+
+### Border Radius and Spacing Tokens
+
+`{rounded.xs}` (4px) through `{rounded.full}` are consumed as literal pixel values, because the component geometry that uses them (control heights, icon sizes, avatar diameters) is itself literal. The rules that keep them consistent:
+
+- Radius never falls outside `{rounded.sm}` / `{rounded.md}` / `{rounded.xl}` / `{rounded.full}`, plus `50%` for true circles. This product has no consumer for `{rounded.none}` or `{rounded.lg}`, and its nested-control case uses `{rounded.sm}` rather than `{rounded.xs}`.
+- Spacing tokens are `{spacing.xs}` (4px) through `{spacing.section}` (64px). Interior gaps and paddings snap to them wherever the value is not constrained by geometry.
+- Uppercase micro-labels carry a positive `letter-spacing` **and** `text-transform: uppercase`, because the tracking exists to open up uppercase letterforms; a label that only looks uppercase in the markup is a bug waiting to happen when the copy is translated or changed. The section kicker uses `1.2px` at `--fs-11`, the status eyebrow `1px` at `--fs-11`, and the `output-heading` status word `1px` at `--fs-11`.
+- Three values sit deliberately between two tokens and are the only ones that do: the sort-option hit inset (`18px`, between `{spacing.base}` and `{spacing.lg}`) and the stacked-field gap in compact forms (`18px`, same interval) ease a control that would otherwise feel cramped; and the compact card grid gutter tightens to `28px` on narrow viewports, from `{spacing.xl}` (32px) at desktop, rather than dropping a whole step to `{spacing.lg}`.
+- Other literal values are one of three things, and none of them is an oversight: the search pill's `19px` inset is `{spacing.lg}` (20px) minus 1px, reserving room for its always-present 2px border so focus never reflows it; geometric values (icon sizes, control heights, `min-width` of buttons, table row heights, `max-width` of truncating cells) measure an element rather than the space between elements; and the few optical nudges that align a value to a neighbouring edge rather than to the rhythm stay literal on purpose.
+
 ### Dark Theme Principles
 
 - Dark Theme uses layered surfaces (`#151515`, `#1d1d1d`, `#242424`, `#2c2c2c`) instead of pure black and pure white contrast.
 - Text contrast remains hierarchical: primary text is near-white, body text is softer, and muted text is reserved for metadata and controls.
 - Rausch remains the only main brand accent. Its Dark Theme value is slightly lighter for comfortable visibility on dark surfaces; accent buttons and their disabled state always use white foreground text, and the active state does not rely on transforms or extra decoration.
 - Borders are more visible than Light Mode but remain restrained. Surface separation and borders carry most of the depth instead of increasingly strong shadows.
-- Disabled controls use a darkened Rausch surface with a dedicated muted foreground so they remain visibly disabled without becoming invisible.
+- Disabled controls always keep their label readable and never become invisible: an accent-filled control steps down to `--color-accent-disabled` with `--color-on-accent-disabled` on top, while a bordered or transparent control keeps its surface and drops to `--color-text-disabled` with a reduced-contrast border. Disabled state never relies on opacity alone for a control that carries text.
 - Real product images are not color-inverted or filtered. Only their surrounding placeholder surfaces adapt to the active theme.
 
 ### Elevation and States

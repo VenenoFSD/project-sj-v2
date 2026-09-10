@@ -23,8 +23,13 @@
 
   --color-error: #c13515;
   --color-on-error: #fff;
-  --color-error-hover: #b32505;
   --color-error-surface: #fff4f2;
+  /* Error-hover is defined for parity with the documented error family; this product has no
+     error *link* yet, so nothing consumes it. Keep the token rather than let it drift. */
+  --color-error-hover: #b32505;
+
+  --color-success: #0b7a4b;
+  --color-success-surface: #eef8f2;
 
   --color-tag-surface: #fff0f2;
   --color-tooltip-surface: #fff;
@@ -42,6 +47,26 @@
   --color-chart-surface: #fff;
   --color-chart-price: #dc4d5d;
   --color-chart-deal: #536da4;
+
+  /* Semantic type scale. Components reference these instead of raw pixel values. */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-22: 22px;
+  --fs-28: 28px;
+
+  /* Motion. Three durations cover every state change, plus one for indeterminate spinners and
+     one for the skeleton shimmer loop; components must not invent their own. */
+  --duration-fast: .15s;
+  --duration-base: .2s;
+  --duration-drawer: .22s;
+  --duration-spin: 1s;
+  --duration-shimmer: 1.4s;
+  --ease-standard: ease;
+  --ease-entrance: ease-out;
 }
 
 :root[data-theme="dark"] {
@@ -71,6 +96,9 @@
   --color-on-error: #151515;
   --color-error-hover: #ffab91;
   --color-error-surface: #3a211d;
+
+  --color-success: #5fd39c;
+  --color-success-surface: #16301f;
 
   --color-tag-surface: #3a2028;
   --color-tooltip-surface: #2c2c2c;
@@ -112,6 +140,27 @@ button, a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Intentionally literal (not tokenised) spacing values:
+   - the search pill's 19px inset is the 20px spacing token minus one pixel, reserving room for
+     its always-present 2px border so focus never reflows the pill (see DESIGN.md);
+   - geometry values (icon sizes, control heights, avatar diameters) are deliberately off the
+     8px rhythm because they measure an element, not the space between elements. */
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+}
+
+/* Responsive typography stays in the token layer so no component has to redefine a heading
+   size: display tokens step down one documented size on tablet and mobile. */
+@media (max-width: 744px) {
+  :root {
+    --fs-28: 22px;
+    --fs-22: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  :root {
+    --fs-22: 16px;
+  }
 }

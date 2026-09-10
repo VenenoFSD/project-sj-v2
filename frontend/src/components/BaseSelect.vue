@@ -143,19 +143,20 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
 
 <style scoped>
 .select-field { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
-.field-label { color: var(--color-text-primary); font-size: 13px; font-weight: 600; }
+.field-label { color: var(--color-text-primary); font-size: var(--fs-13); font-weight: 600; }
 .select-control { position: relative; }
-.select-trigger { display: flex; width: 100%; height: 48px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: 8px; outline: 0; background: var(--color-surface); color: var(--color-text-primary); font-size: 14px; text-align: left; cursor: pointer; }
-.select-trigger:hover { border-color: var(--color-border-strong); }
-.select-trigger:focus-visible { border: 2px solid var(--color-focus); }
+.select-trigger { display: flex; width: 100%; height: 48px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 11px; border: 2px solid transparent; border-radius: 8px; outline: 0; background: var(--color-surface); color: var(--color-text-primary); font-size: var(--fs-14); text-align: left; cursor: pointer; box-shadow: inset 0 0 0 1px var(--color-border); }
+.select-trigger:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+/* Always-present transparent border so focus recolors instead of reflowing the label. */
+.select-trigger:focus-visible { border-color: var(--color-focus); box-shadow: none; }
 .select-trigger:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
-.select-trigger svg { flex: 0 0 auto; color: var(--color-text-muted); transition: transform .2s ease; }
+.select-trigger svg { flex: 0 0 auto; color: var(--color-text-muted); transition: transform var(--duration-base) var(--ease-standard); }
 .select-trigger svg.open { transform: rotate(180deg); }
-.select-menu { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; left: 0; display: grid; gap: 2px; max-height: 240px; padding: 4px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); box-shadow: var(--shadow-card); }
-.select-option { display: flex; min-height: 40px; align-items: center; padding: 0 12px; border: 0; border-radius: 4px; outline: 0; background: transparent; color: var(--color-text-primary); font-size: 14px; line-height: 1.43; text-align: left; cursor: pointer; }
+.select-menu { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; left: 0; display: grid; gap: 4px; max-height: 240px; padding: 4px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); box-shadow: var(--shadow-card); }
+.select-option { display: flex; min-height: 40px; align-items: center; padding: 0 12px; border: 0; border-radius: 8px; outline: 0; background: transparent; color: var(--color-text-primary); font-size: var(--fs-14); line-height: 1.43; text-align: left; cursor: pointer; }
 .select-option:hover, .select-option.highlighted, .select-option:focus-visible { background: var(--color-surface-strong); }
 .select-option.selected { color: var(--color-text-primary); font-weight: 500; }
-.select-field small { min-height: 16px; color: var(--color-text-disabled); font-size: 12px; line-height: 1.3; }
+.select-field small { min-height: 16px; color: var(--color-text-disabled); font-size: var(--fs-12); line-height: 1.23; }
 @media (prefers-reduced-motion: reduce) {
   .select-trigger svg { transition-duration: .01ms; }
 }
