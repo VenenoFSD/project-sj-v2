@@ -139,3 +139,20 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/schedules" -Method Post -ContentTyp
 使用 `GET /api/schedules` 或 `GET /api/schedules/{schedule_id}` 查看 `enabled`、`last_status`、`last_error`、`last_run_at`、`last_finished_at` 和 `next_run_at`。前端可使用 `POST /api/schedules/{schedule_id}/run` 立即触发一次，使用 `PATCH` 修改或启停任务，使用 `DELETE` 删除任务。
 
 后端关闭时会停止调度器并终止仍在运行的爬虫子进程；关键调度、启动、跳过、完成、异常和生命周期事件写入后端日志。
+
+## 前端开发（Windows 注意事项）
+
+```powershell
+cd frontend
+npm run dev          # http://localhost:5173
+npm run build        # 产出 frontend/dist
+```
+
+Windows 下文件监听器存在一个已知问题：编辑器或自动化工具保存文件时采用**原子写入**（先在目标同目录建 `<文件名>.<pid>.<uuid>.tmpdir/`，写完 rename 覆盖，再删除临时目录）。临时目录出现在监听范围内、又在监听器完成注册前被删除时，`fs.watch` 会返回 `EBUSY`，该 `error` 事件未被兜住，会把整个 `npm run dev` 进程带崩（报错路径形如 `src/styles/.theme.css.<pid>.<uuid>.tmpdir/theme.css.tmp`）。
+
+`frontend/vite.config.js` 已经在 `server.watch.ignored` 中排除了这类临时目录、`dist/` 与 VCS 元数据，因此正常情况下不会再触发。若仍然遇到：
+
+1. 重新执行 `npm run dev` 即可，源码本身没有损坏；
+2. 确认 `npm run dev` 与 `npm run build` **没有同时运行**——两者都会大量读写 `frontend/` 下的文件；
+3. 必要时清理残留：`Get-ChildItem frontend -Recurse -Force -Filter "*.tmpdir" | Remove-Item -Recurse -Force`。
+

@@ -13,7 +13,8 @@ Lightweight product tracking web application for Bilibili membership-store resal
 ## Architecture
 
 ```text
-frontend/              Vue frontend (currently scaffold; business UI not implemented)
+frontend/              Vue frontend (product browsing and backend task management UI)
+frontend/src/composables/  Reusable Vue 3 composables shared across views
 backend/               FastAPI application, services, repositories, models and crawler
 backend/api/           FastAPI route modules
 backend/services/      Business logic
@@ -21,13 +22,13 @@ backend/database/      SQLAlchemy models, sessions and repositories
 backend/crawler/       Standalone data collection CLI
 data/                  Runtime SQLite database and exports
 docs/                  API, crawler, runbook and project progress documentation
-scripts/               Utility scripts (currently empty)
 ```
 
 Keep clear boundaries:
 
 * Vue components handle UI and interaction.
-* `frontend/src/api/` handles API requests when frontend integration is added.
+* `frontend/src/api/` handles API requests. Views and components import from it and never call `fetch` themselves.
+* `frontend/src/composables/` holds reusable stateful logic shared by more than one view or component, such as the theme store. Do not put API request code here.
 * FastAPI `api/` handles HTTP endpoints.
 * Backend `services/` handles business logic.
 * Backend `database/` handles persistence.
@@ -76,7 +77,8 @@ Do not delete or recreate the database as part of normal code changes unless exp
 * The crawler supports home/filter discovery, paginated product collection, optional detail collection, trend analysis, price alerts and JSON/CSV export.
 * `--detail` collects details for every product returned in a run; large runs can be slow and more likely to hit rate limits.
 * Detail, deal and price-point APIs only return data previously persisted by a crawler run using `--detail`.
-* The frontend is still the default Vue scaffold and has not been connected to the API.
+* The frontend implements product browsing (list, category and sort filters, keyword search, pagination) and a product detail drawer with price-history and deal charts, plus backend pages for manual and scheduled crawls. It talks to the API only through `frontend/src/api/`.
+* Favorites and price-alert display are not implemented in the frontend yet.
 * Automated tests and authentication are not implemented yet.
 
 ## Documentation
@@ -88,5 +90,19 @@ Do not delete or recreate the database as part of normal code changes unless exp
 
 ## Verification
 
-* Python execution is unavailable in the current restricted sandbox. Do not run `python`, `py`, or Python-based validation commands here.
+Permissions are restricted in this sandbox and JavaScript tooling is only partially available, so verification stays at the basic level described here.
+
+* Python execution is unavailable. Do not run `python`, `py`, or Python-based validation commands here.
 * For Python changes, provide the exact verification commands for the user to run locally; use non-Python static checks in the sandbox where appropriate.
+* Frontend verification is a build only. A successful `vite build` and a refreshed `frontend/dist/` are the whole check — do not start a dev or preview server, and do not drive a headless browser, for verification purposes.
+* Do not leave verification scaffolding behind: no temporary scripts, test directories or generated files that are not part of the deliverable. Anything created for a check must be removed before finishing.
+* The user's own `npm run dev` may be running in the same working tree. Do not start a competing server, and do not try to run a build and a dev server against the same tree at once if it can be avoided.
+* Static checks that are cheap and useful here: `git status` to confirm the change set, and grep-style checks that a change is consistent across files (for example that no component writes a raw color or font size).
+
+The frontend check, in full:
+
+```powershell
+cd frontend
+npm run build
+```
+

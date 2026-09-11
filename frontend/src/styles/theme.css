@@ -1,0 +1,166 @@
+:root {
+  color-scheme: light;
+
+  --color-canvas: #fff;
+  --color-surface: #fff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-strong: #f2f2f2;
+
+  --color-text-primary: #222;
+  --color-text-secondary: #3f3f3f;
+  --color-text-muted: #6a6a6a;
+  --color-text-disabled: #929292;
+
+  --color-border: #ddd;
+  --color-border-soft: #ebebeb;
+  --color-border-strong: #c1c1c1;
+
+  --color-accent: #ff385c;
+  --color-accent-hover: #e00b41;
+  --color-accent-disabled: #ffd1da;
+  --color-on-accent: #fff;
+  --color-on-accent-disabled: #fff;
+
+  --color-error: #c13515;
+  --color-on-error: #fff;
+  --color-error-surface: #fff4f2;
+  /* Error-hover is defined for parity with the documented error family; this product has no
+     error *link* yet, so nothing consumes it. Keep the token rather than let it drift. */
+  --color-error-hover: #b32505;
+
+  --color-success: #0b7a4b;
+  --color-success-surface: #eef8f2;
+
+  --color-tag-surface: #fff0f2;
+  --color-tooltip-surface: #fff;
+  --color-tooltip-text: #222;
+
+  --color-focus: #222;
+  --color-scrim: rgba(0, 0, 0, .5);
+
+  --shadow-card: rgba(0, 0, 0, .02) 0 0 0 1px, rgba(0, 0, 0, .04) 0 2px 6px, rgba(0, 0, 0, .1) 0 4px 8px;
+  --shadow-drawer: -8px 0 20px rgba(0, 0, 0, .08);
+
+  --color-chart-label: #94a3b8;
+  --color-chart-axis: #e9edf4;
+  --color-chart-grid: #edf0f5;
+  --color-chart-surface: #fff;
+  --color-chart-price: #dc4d5d;
+  --color-chart-deal: #536da4;
+
+  /* Semantic type scale. Components reference these instead of raw pixel values. */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-22: 22px;
+  --fs-28: 28px;
+
+  /* Motion. Three durations cover every state change, plus one for indeterminate spinners and
+     one for the skeleton shimmer loop; components must not invent their own. */
+  --duration-fast: .15s;
+  --duration-base: .2s;
+  --duration-drawer: .22s;
+  --duration-spin: 1s;
+  --duration-shimmer: 1.4s;
+  --ease-standard: ease;
+  --ease-entrance: ease-out;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-canvas: #151515;
+  --color-surface: #1d1d1d;
+  --color-surface-soft: #242424;
+  --color-surface-strong: #2c2c2c;
+
+  --color-text-primary: #f5f5f5;
+  --color-text-secondary: #dedede;
+  --color-text-muted: #ababab;
+  --color-text-disabled: #777;
+
+  --color-border: #3b3b3b;
+  --color-border-soft: #2d2d2d;
+  --color-border-strong: #5a5a5a;
+
+  --color-accent: #ff5470;
+  --color-accent-hover: #ff7188;
+  --color-accent-disabled: #713847;
+  --color-on-accent: #fff;
+  --color-on-accent-disabled: #fff;
+
+  --color-error: #ff8a65;
+  --color-on-error: #151515;
+  --color-error-hover: #ffab91;
+  --color-error-surface: #3a211d;
+
+  --color-success: #5fd39c;
+  --color-success-surface: #16301f;
+
+  --color-tag-surface: #3a2028;
+  --color-tooltip-surface: #2c2c2c;
+  --color-tooltip-text: #f5f5f5;
+
+  --color-focus: #fff;
+  --color-scrim: rgba(0, 0, 0, .68);
+
+  --shadow-card: rgba(255, 255, 255, .07) 0 0 0 1px, rgba(0, 0, 0, .28) 0 4px 12px;
+  --shadow-drawer: -8px 0 20px rgba(0, 0, 0, .28);
+
+  --color-chart-label: #aeb4c0;
+  --color-chart-axis: #3a414d;
+  --color-chart-grid: #343a45;
+  --color-chart-surface: #1d1d1d;
+  --color-chart-price: #ff6b83;
+  --color-chart-deal: #9eb7e8;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+  font-family: "Airbnb Cereal VF", Circular, Inter, -apple-system, system-ui, Roboto, "Helvetica Neue", sans-serif;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Intentionally literal (not tokenised) spacing values:
+   - the search pill's 19px inset is the 20px spacing token minus one pixel, reserving room for
+     its always-present 2px border so focus never reflows the pill (see DESIGN.md);
+   - geometry values (icon sizes, control heights, avatar diameters) are deliberately off the
+     8px rhythm because they measure an element, not the space between elements. */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Responsive typography stays in the token layer so no component has to redefine a heading
+   size: display tokens step down one documented size on tablet and mobile. */
+@media (max-width: 744px) {
+  :root {
+    --fs-28: 22px;
+    --fs-22: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  :root {
+    --fs-22: 16px;
+  }
+}
