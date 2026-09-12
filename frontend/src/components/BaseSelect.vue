@@ -117,7 +117,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         @click="toggleMenu"
         @keydown="handleTriggerKeydown"
       >
-        <span>{{ selectedOption?.label || '请选择' }}</span>
+        <span class="select-value">{{ selectedOption?.label || '请选择' }}</span>
         <ChevronDown :size="17" :stroke-width="1.8" :class="{ open: isOpen }" aria-hidden="true" />
       </button>
       <div v-if="isOpen" :id="listId" class="select-menu" role="listbox" :aria-labelledby="labelId">
@@ -149,6 +149,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
 .select-trigger:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 /* Always-present transparent border so focus recolors instead of reflowing the label. */
 .select-trigger:focus-visible { border-color: var(--color-focus); box-shadow: none; }
+/* IP 分区名可能很长，触发器保持单行，超出部分省略，控件宽度不随选中项变化。 */
+.select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select-trigger:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
 .select-trigger svg { flex: 0 0 auto; color: var(--color-text-muted); transition: transform var(--duration-base) var(--ease-standard); }
 .select-trigger svg.open { transform: rotate(180deg); }
@@ -156,7 +158,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
 .select-option { display: flex; min-height: 40px; align-items: center; padding: 0 12px; border: 0; border-radius: 8px; outline: 0; background: transparent; color: var(--color-text-primary); font-size: var(--fs-14); line-height: 1.43; text-align: left; cursor: pointer; }
 .select-option:hover, .select-option.highlighted, .select-option:focus-visible { background: var(--color-surface-strong); }
 .select-option.selected { color: var(--color-text-primary); font-weight: 500; }
-.select-field small { min-height: 16px; color: var(--color-text-disabled); font-size: var(--fs-12); line-height: 1.23; }
+/* Helper line below a control is {typography.caption-sm} in {colors.muted-soft} (DESIGN.md Forms). */
+.select-field small { min-height: 16px; color: var(--color-text-disabled); font-size: var(--fs-13); line-height: 1.23; }
 @media (prefers-reduced-motion: reduce) {
   .select-trigger svg { transition-duration: .01ms; }
 }

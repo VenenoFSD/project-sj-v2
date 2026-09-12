@@ -24,7 +24,9 @@ Swagger UI：`http://127.0.0.1:8000/docs`
 
 查询当前有效商品。
 
-查询参数：`category`（可选）、`search`（商品标题关键词，可选）、`sort`（`price` 或 `discount`，可选）、`limit`（1-100，默认 20）、`offset`（默认 0）。响应包含 `items`、`total`、`limit` 和 `offset`。
+查询参数：`category`（可选）、`ip`（IP 分区名，可选）、`search`（商品标题关键词，可选）、`sort`（`price` 或 `discount`，可选）、`limit`（1-100，默认 20）、`offset`（默认 0）。响应包含 `items`、`total`、`limit` 和 `offset`。
+
+`ip` 匹配的是商品详情属性中 `attrName` 为 `IP` 的 `attrValue`，因此只覆盖已用 `--detail` 采集过详情的商品；没有详情记录的商品不会出现在任何具体 IP 的结果里，只在 `ip` 留空时返回。可选的 IP 名从 `GET /api/catalog/ip` 获取，两边按名称匹配。
 
 ### `GET /api/products/{cluster_id}/history`
 

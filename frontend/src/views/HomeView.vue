@@ -15,7 +15,9 @@ echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const products = ref([])
 const categories = ref([])
+const ips = ref([])
 const category = ref('')
+const ip = ref('')
 const sort = ref('')
 const search = ref('')
 const submittedSearch = ref('')
@@ -44,6 +46,13 @@ const categoryOptions = computed(() => [
   { value: '', label: '全部' },
   ...categories.value.map((item) => ({ value: String(item.item_id), label: item.name || String(item.item_id) })),
 ])
+// 选项取 B 站首页抓下来的 IP 分区列表；筛选值仍是详情属性里的 IP 名，所以两边必须同名才筛得到。
+const ipOptions = computed(() => [
+  { value: '', label: '全部' },
+  ...ips.value
+    .filter((item) => item.name)
+    .map((item) => ({ value: item.name, label: item.name })),
+])
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const pageNumbers = computed(() => {
@@ -55,7 +64,7 @@ async function loadProducts() {
   loading.value = true
   error.value = ''
   try {
-    const data = await fetchProducts({ category: category.value, search: submittedSearch.value, sort: sort.value, limit: pageSize, offset: (page.value - 1) * pageSize })
+    const data = await fetchProducts({ category: category.value, ip: ip.value, search: submittedSearch.value, sort: sort.value, limit: pageSize, offset: (page.value - 1) * pageSize })
     products.value = data.items || []
     total.value = data.total || 0
   } catch (err) {
@@ -247,19 +256,20 @@ function imageFailed(clusterId) {
   imageErrors.value = new Set([...imageErrors.value, clusterId])
 }
 
-async function loadCategories() {
+async function loadCatalogOptions(filterType, target) {
   try {
-    const data = await fetchCatalog('category')
-    categories.value = data.items || []
+    const data = await fetchCatalog(filterType)
+    target.value = data.items || []
   } catch {
-    categories.value = []
+    target.value = []
   }
 }
 
 onMounted(() => {
   applyStoredTheme()
   loadProducts()
-  loadCategories()
+  loadCatalogOptions('category', categories)
+  loadCatalogOptions('ip', ips)
   window.addEventListener('resize', resizeCharts)
 })
 onBeforeUnmount(() => {
@@ -267,7 +277,7 @@ onBeforeUnmount(() => {
   disposeCharts()
   document.body.style.overflow = ''
 })
-watch([category, sort], resetAndLoad)
+watch([category, ip, sort], resetAndLoad)
 </script>
 
 <template>
@@ -302,6 +312,7 @@ watch([category, sort], resetAndLoad)
 
       <div class="filter-row" aria-label="商品筛选">
         <BaseSelect v-model="category" class="category-filter" label="分类" :options="categoryOptions" />
+        <BaseSelect v-model="ip" class="ip-filter" label="IP 分类" :options="ipOptions" />
         <div class="sort-filter">
           <span id="sort-label" class="filter-label">排序</span>
           <div class="sort-options" role="group" aria-labelledby="sort-label">
@@ -400,8 +411,11 @@ watch([category, sort], resetAndLoad)
 .theme-toggle { display: grid; width: 40px; height: 40px; padding: 0; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
 .theme-toggle:hover, .theme-toggle:focus-visible { background: var(--color-surface-strong); box-shadow: var(--shadow-card); }
 .section-kicker, .drawer-kicker { margin: 0 0 12px; color: var(--color-text-muted); font-size: var(--fs-11); font-weight: 700; letter-spacing: 1.2px; line-height: 1.3; text-transform: uppercase; }
-.search-filter-row { display: flex; align-items: center; gap: 24px; width: 100%; margin: 48px auto 0; }
-.search-section { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: stretch; gap: 8px; }
+/* Two bands, not one row: DESIGN.md fixes the search pill at 64px and the dense application
+   controls at 48px, so side by side their boxes would sit 8px out of step against each other
+   and their labels on two different baselines. Stacked, each band keeps its documented height. */
+.search-filter-row { display: flex; flex-direction: column; align-items: stretch; gap: 24px; width: 100%; margin: 48px auto 0; }
+.search-section { display: flex; min-width: 0; flex-direction: column; align-items: stretch; gap: 8px; }
 .search-bar { flex: 0 0 64px; height: 64px; padding: 0 19px; border: 2px solid transparent; border-radius: 9999px; background: var(--color-surface); box-shadow: var(--shadow-card); transition: border-color var(--duration-fast) var(--ease-standard); }
 /* The pill is the control, so states land on its border and the inner input must never draw its
    own box (DESIGN.md "Search pill states"). The 2px border is always present and transparent —
@@ -420,9 +434,10 @@ watch([category, sort], resetAndLoad)
 .search-orb:focus-visible { outline: 2px solid var(--color-on-accent); outline-offset: -4px; }
 .search-orb:active { background: var(--color-accent-hover); }
 .search-orb:disabled { background: var(--color-accent-disabled); color: var(--color-on-accent-disabled); cursor: not-allowed; }
-.filter-row { display: flex; align-items: flex-start; flex: 0 1 420px; gap: 24px; min-width: 0; }
-.category-filter { flex: 0 0 180px; min-width: 0; }
-.sort-filter { display: flex; min-width: 0; flex: 1 1 300px; flex-direction: column; align-items: flex-start; gap: 8px; }
+.filter-row { display: flex; align-items: flex-start; gap: 24px; width: 100%; min-width: 0; }
+.category-filter, .ip-filter { flex: 0 0 200px; min-width: 0; }
+/* The sort group anchors the right edge, echoing the space-between rhythm of .results-heading. */
+.sort-filter { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 8px; margin-left: auto; }
 .filter-label { color: var(--color-text-primary); font-size: var(--fs-13); font-weight: 600; }
 .sort-options { display: flex; gap: 4px; padding: 4px; border-radius: 32px; background: var(--color-surface-soft); }
 .sort-option { min-height: 40px; padding: 0 18px; border: 0; border-radius: 9999px; background: transparent; color: var(--color-text-muted); font-size: var(--fs-14); cursor: pointer; }
@@ -510,11 +525,11 @@ watch([category, sort], resetAndLoad)
   .page-shell { width: min(100% - 32px, 560px); }
   .top-nav { height: 64px; }
   .brand-name, .product-nav { display: none; }
-  .search-filter-row { display: block; margin-top: 32px; }
+  .search-filter-row { margin-top: 32px; gap: 16px; }
   .search-bar { height: 56px; }
-  .filter-row { align-items: stretch; flex-direction: column; gap: 16px; margin-top: 16px; }
-  .category-filter { width: 100%; flex-basis: auto; }
-  .sort-filter { flex: none; }
+  .filter-row { align-items: stretch; flex-direction: column; gap: 16px; }
+  .category-filter, .ip-filter { width: 100%; flex-basis: auto; }
+  .sort-filter { margin-left: 0; }
   .sort-options { width: 100%; }
   .sort-option { flex: 1; padding: 0 12px; }
   .results-heading { margin-top: 32px; }

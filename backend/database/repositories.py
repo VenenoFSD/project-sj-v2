@@ -1,15 +1,40 @@
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, select, true
 from sqlalchemy.orm import Session, aliased
 
 from datetime import datetime
 import json
-from backend.database.models import CrawlRun, Product, ProductSnapshot, Favorite, ProductDeal, ProductPricePoint, ScheduledCrawl
+from backend.database.models import CrawlRun, Product, ProductDetail, ProductSnapshot, Favorite, ProductDeal, ProductPricePoint, ScheduledCrawl
+
+# IP 分区不是 `products` 的列：爬虫只把它作为请求筛选条件发出去，归属信息落在详情接口返回的
+# 属性数组里，所以按 IP 筛选要读 `product_details.attributes`。没有详情记录的商品 IP 未知，
+# 任何具体 IP 都匹配不到 —— 这与详情、成交、价格点接口的数据覆盖限制一致。
+IP_ATTRIBUTE_NAME = "IP"
 
 
-def list_products(db: Session, category: str | None, search: str | None, sort: str | None, limit: int, offset: int):
+def ip_attribute_rows():
+    """`product_details.attributes` 上的 `json_each` 表值别名。"""
+    return func.json_each(ProductDetail.attributes).table_valued("value")
+
+
+def ip_attribute_product_ids(ip: str):
+    """详情属性中 `IP` 等于给定值的商品 id 子查询。"""
+    attribute = ip_attribute_rows()
+    return (
+        select(ProductDetail.product_id)
+        .join(attribute, true())
+        .where(
+            func.json_extract(attribute.c.value, "$.attrName") == IP_ATTRIBUTE_NAME,
+            func.json_extract(attribute.c.value, "$.attrValue") == ip,
+        )
+    )
+
+
+def list_products(db: Session, category: str | None, ip: str | None, search: str | None, sort: str | None, limit: int, offset: int):
     query = select(Product).where(Product.is_active.is_(True))
     if category:
         query = query.where(Product.category == category)
+    if ip:
+        query = query.where(Product.id.in_(ip_attribute_product_ids(ip)))
     if search:
         query = query.where(Product.title.ilike(f"%{search}%"))
     if sort:
@@ -36,10 +61,12 @@ def list_products(db: Session, category: str | None, search: str | None, sort: s
         query = query.order_by(desc(Product.last_seen_at), Product.id.asc())
     return list(db.scalars(query.limit(limit).offset(offset)))
 
-def count_products(db: Session, category: str | None, search: str | None):
+def count_products(db: Session, category: str | None, ip: str | None, search: str | None):
     query = select(func.count()).select_from(Product).where(Product.is_active.is_(True))
     if category:
         query = query.where(Product.category == category)
+    if ip:
+        query = query.where(Product.id.in_(ip_attribute_product_ids(ip)))
     if search:
         query = query.where(Product.title.ilike(f"%{search}%"))
     return db.scalar(query) or 0

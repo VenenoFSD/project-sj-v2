@@ -77,7 +77,8 @@ Do not delete or recreate the database as part of normal code changes unless exp
 * The crawler supports home/filter discovery, paginated product collection, optional detail collection, trend analysis, price alerts and JSON/CSV export.
 * `--detail` collects details for every product returned in a run; large runs can be slow and more likely to hit rate limits.
 * Detail, deal and price-point APIs only return data previously persisted by a crawler run using `--detail`.
-* The frontend implements product browsing (list, category and sort filters, keyword search, pagination) and a product detail drawer with price-history and deal charts, plus backend pages for manual and scheduled crawls. It talks to the API only through `frontend/src/api/`.
+* The frontend implements product browsing (list, category, IP and sort filters, keyword search, pagination) and a product detail drawer with price-history and deal charts, plus backend pages for manual and scheduled crawls. It talks to the API only through `frontend/src/api/`.
+* The IP filter's options come from the captured IP catalog (`catalog_filters` where `filter_type='ip'`, surfaced by `GET /api/catalog/ip`), while the filter itself matches the `IP` attribute inside `product_details.attributes`, which the crawler only writes when a run used `--detail`. The two sides match on the IP name, so a zone listed in the catalog returns nothing until a detail run has stored that same name; products without details only appear when the IP filter is left on 全部.
 * Favorites and price-alert display are not implemented in the frontend yet.
 * Automated tests and authentication are not implemented yet.
 

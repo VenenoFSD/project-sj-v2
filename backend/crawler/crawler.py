@@ -18,7 +18,7 @@ import uuid
 from typing import Optional, List, Dict, Any, Tuple, Set
 from datetime import datetime
 from dataclasses import dataclass, field
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from contextlib import contextmanager
 import threading
 
@@ -79,6 +79,7 @@ class CrawlerConfig:
     max_pages: int = 500
     default_pages: int = 0
     rate_limit_wait_base: float = 2.5
+    rate_limit_wait_max: float = 60.0
     request_interval: Tuple[float, float] = (0.7, 1.1)
     page_retries: int = 2
     page_retry_wait: float = 2.0
@@ -239,6 +240,22 @@ class BiliResellCrawler:
                 # 更新与新 UA 匹配的完整 headers
                 headers = self._build_headers()
                 self.session.headers.update(headers)
+
+    def _rebuild_session(self):
+        """重建 Session：连接级故障时仅刷新 Cookie/UA 不会替换底层连接池。
+
+        坏 socket 会留在原连接池里反复失败，必须整个丢弃并新建 Session 才能恢复。
+        注意 _init_session -> _refresh_session 还会再取一次锁，所以这里先释放锁再重建。
+        """
+        with self._lock:
+            old_session = self.session
+            self.session = None
+        if old_session is not None:
+            try:
+                old_session.close()
+            except Exception as e:
+                LOGGER.warning("session close failed during rebuild error=%s", e)
+        self._init_session()
     
     def _api_post(self, path: str, body: Dict[str, Any], retries: Optional[int] = None) -> Dict[str, Any]:
         """调用 API，支持智能重试"""
@@ -268,7 +285,7 @@ class BiliResellCrawler:
                 
                 if is_rate_limited:
                     rate_limit_streak += 1
-                    wait = self._calculate_wait_time(attempt)
+                    wait = self._calculate_rate_limit_wait(attempt)
                     refresh = rate_limit_streak >= 3
                     self._log_warning(
                         f"触发频控，等待 {wait:.1f}s 后重试 "
@@ -322,6 +339,20 @@ class BiliResellCrawler:
                 time.sleep(wait)
                 last_error = e
                 
+            except requests.exceptions.ConnectionError as e:
+                # 连接级故障（坏 socket、连接池污染、远端断连）：刷新指纹解决不了，得重建 Session。
+                # 该分支放在 Timeout 之后，连接超时仍走超时处理。
+                rate_limit_streak = 0
+                wait = attempt * 2.0
+                self._log_warning(f"连接异常，重建会话后等待 {wait:.1f}s 重试: {e}")
+                LOGGER.warning(
+                    "api retry url=%s attempt=%d/%d reason=connection_error wait=%.1fs rebuild_session=true error=%s",
+                    url, attempt, retries, wait, e
+                )
+                time.sleep(wait)
+                self._rebuild_session()
+                last_error = e
+
             except requests.exceptions.RequestException as e:
                 rate_limit_streak = 0
                 wait = attempt * 2.0
@@ -366,7 +397,7 @@ class BiliResellCrawler:
             except urllib.error.HTTPError as e:
                 if e.code == 429:
                     rate_limit_streak += 1
-                    wait = self._calculate_wait_time(attempt)
+                    wait = self._calculate_rate_limit_wait(attempt)
                     refresh = rate_limit_streak >= 3
                     self._log_warning(
                         f"触发频控，等待 {wait:.1f}s 后重试 "
@@ -437,6 +468,15 @@ class BiliResellCrawler:
         wait = attempt * base
         jitter = random.uniform(0.9, 1.2)
         return wait * jitter
+
+    def _calculate_rate_limit_wait(self, attempt: int) -> float:
+        """计算频控退避时间：指数增长并封顶。
+
+        线性退避（attempt * base）在连续 429 时累计等待过短，往往不足以等到频控窗口滑出；
+        这里改为指数增长，并用 rate_limit_wait_max 封顶避免单次等待过长。
+        """
+        wait = self.config.rate_limit_wait_base * (2 ** (attempt - 1))
+        return min(wait, self.config.rate_limit_wait_max) * random.uniform(0.9, 1.2)
     
     def _log_warning(self, msg: str):
         print(f"\n  [⚠] {msg}", file=sys.stderr, flush=True)
@@ -518,14 +558,16 @@ class BiliResellCrawler:
         chart_points = []
         if recent_buy.get("chartData"):
             chart_points = recent_buy["chartData"].get("chartPoints", [])
-        deals = recent_buy.get("recentDeals") or []
+        deals = recent_buy.get("recentDeals") or recent_buy.get("deals") or []
         cluster_id = data.get("clusterId") or basic.get("clusterId") or ""
         deal_field = "deals" if recent_buy.get("deals") else ("recentDeals" if recent_buy.get("recentDeals") else "none")
         LOGGER.info("detail payload cluster_id=%s basic_fields=%s recent_buy_fields=%s deal_field=%s deals=%d chart_points=%d", cluster_id, list(basic.keys()), list(recent_buy.keys()), deal_field, len(deals), len(chart_points))
         
         latest_deal_price = None
         if deals and len(deals) > 0 and deals[0].get("dealPrice"):
-            latest_deal_price = str(deals[0].get("dealPrice"))
+            # 与下方走势点分支保持一致，统一带上货币符号，避免前端同一字段时而带 ¥ 时而不带。
+            p_val_str = str(deals[0].get("dealPrice")).strip()
+            latest_deal_price = p_val_str if p_val_str.startswith("¥") else f"¥{p_val_str}"
         elif chart_points and len(chart_points) > 0:
             last_pt = chart_points[-1]
             p_val = last_pt.get("avgPrice") or last_pt.get("price")
@@ -565,6 +607,51 @@ def fetch_detail_with_worker(config: CrawlerConfig, cluster_id: str) -> Optional
 
 DETAIL_FAILURE_ID_OUTPUT_LIMIT = 20
 
+VOLUME_ANOMALY_RATIO = 0.5
+VOLUME_ANOMALY_MIN_BASELINE = 50
+VOLUME_BASELINE_RUNS = 5
+
+
+def classify_request_error(error: Optional[Exception]) -> str:
+    """把请求异常归类成简短原因，便于在失败统计里扫读。"""
+    if isinstance(error, json.JSONDecodeError):
+        return "响应非 JSON（疑似被反爬拦截）"
+    text = str(error or "")
+    lowered = text.lower()
+    if "429" in text:
+        return "频控限速"
+    if "sslcertverification" in lowered or "hostname mismatch" in lowered or "certificate" in lowered:
+        return "SSL 证书校验失败"
+    if "timeout" in lowered or "timed out" in lowered:
+        return "请求超时"
+    if "connection" in lowered or "remotedisconnected" in lowered or "max retries" in lowered:
+        return "连接异常"
+    return "其他错误"
+
+
+def report_volume_anomaly(db_mgr, crawl_run_id: int, category: Optional[str], ip_id: Optional[str],
+                          requested_pages: int, product_count: int):
+    """本次抓取量明显低于同条件历史均值时告警。
+
+    反爬生效通常表现为静默少给数据而不是报错，所以抓取量的塌陷比失败页数更早暴露问题。
+    只在同分类、同 IP、同请求页数且状态为 success 的历史批次之间比较，避免小页数试跑误报。
+    """
+    baseline = db_mgr.get_recent_run_counts(
+        category, ip_id, requested_pages,
+        exclude_run_id=crawl_run_id, limit=VOLUME_BASELINE_RUNS
+    )
+    if not baseline:
+        return
+    average = sum(baseline) / len(baseline)
+    if average < VOLUME_ANOMALY_MIN_BASELINE or product_count >= average * VOLUME_ANOMALY_RATIO:
+        return
+    print(f"  ⚠ 本次仅抓取 {product_count} 条，低于最近 {len(baseline)} 次同条件抓取均值 {average:.0f} 条的 "
+          f"{VOLUME_ANOMALY_RATIO:.0%}；疑似被频控截断，建议稍后重试或加大翻页深度。")
+    LOGGER.warning(
+        "low volume crawl_run_id=%s category=%s ip_id=%s requested_pages=%s count=%d baseline_avg=%.1f baseline_counts=%s",
+        crawl_run_id, category, ip_id, requested_pages, product_count, average, baseline
+    )
+
 
 def report_crawl_summary(list_stats: Dict[str, Any], detail_success: Optional[int] = None, detail_failures: Optional[List[str]] = None):
     detail_failures = detail_failures or []
@@ -574,6 +661,14 @@ def report_crawl_summary(list_stats: Dict[str, Any], detail_success: Optional[in
         f"  列表请求：成功 {list_stats['succeeded']} 页，失败 {list_stats['failed']} 页",
     ]
     log_lines = list(console_lines)
+
+    if list_stats["failures"]:
+        reason_counts = Counter(failure.get("reason", "其他错误") for failure in list_stats["failures"])
+        reason_line = "  失败原因分布：" + "、".join(
+            f"{reason} × {count}" for reason, count in reason_counts.most_common()
+        )
+        console_lines.append(reason_line)
+        log_lines.append(reason_line)
 
     for failure in list_stats["failures"]:
         line = f"  列表失败：sort={failure['sort']} page={failure['page']} error={failure['error']}"
@@ -842,6 +937,27 @@ class SQLiteDataManager:
                 SET finished_at=?, product_count=?, status=?, actual_pages=COALESCE(?, actual_pages)
                 WHERE id=?
             """, (finished_at, product_count, status, actual_pages, crawl_run_id))
+
+    def get_recent_run_counts(self, category: Optional[str], ip_id: Optional[str], requested_pages: int,
+                              exclude_run_id: Optional[int] = None, limit: int = 5) -> List[int]:
+        """取同条件（分类 / IP / 请求页数）最近若干次成功抓取的商品数，用作抓取量基线。
+
+        category 与 ip_id 可能为 NULL（不限定分类或 IP），所以用 SQLite 的位运算符 IS 做
+        空值安全比较，它能同时覆盖 NULL 与普通等值两种情况。
+        """
+        sql = """
+            SELECT product_count FROM crawl_runs
+            WHERE status = 'success' AND product_count > 0
+              AND category IS ? AND ip_id IS ? AND requested_pages = ?
+        """
+        params: List[Any] = [category, ip_id, requested_pages]
+        if exclude_run_id is not None:
+            sql += " AND id != ?"
+            params.append(exclude_run_id)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self.get_connection() as conn:
+            return [row[0] for row in conn.execute(sql, params).fetchall()]
 
     def save_products(self, products: List[Product], crawl_run_id: int):
         if not products:
@@ -1216,6 +1332,7 @@ def main():
     if not products:
         report_crawl_summary(list_stats)
         db_mgr.finish_crawl(crawl_run_id, 0, status="empty", actual_pages=getattr(crawler, "actual_pages", 0))
+        report_volume_anomaly(db_mgr, crawl_run_id, category, ip_id, args.pages, 0)
         print("\n未获取到任何商品")
         return
 
@@ -1227,6 +1344,7 @@ def main():
     db_mgr.save_products(products, crawl_run_id)
     db_mgr.finish_crawl(crawl_run_id, len(products), status="success", actual_pages=getattr(crawler, "actual_pages", 0))
     print(f"已保存 {len(products)} 条商品快照到数据库 -> {args.db} (crawl_run={crawl_run_id})")
+    report_volume_anomaly(db_mgr, crawl_run_id, category, ip_id, args.pages, len(products))
     
     # CSV 导出（可选）
     if args.csv:
@@ -1365,12 +1483,13 @@ def crawl_products(crawler: BiliResellCrawler, args,
 
             if feed is None:
                 e = last_error or RuntimeError("unknown page fetch error")
+                reason = classify_request_error(e)
                 list_stats["failed"] += 1
-                failure = {"sort": sort_type, "page": page, "error": str(e)}
+                failure = {"sort": sort_type, "page": page, "error": str(e), "reason": reason}
                 list_stats["failures"].append(failure)
-                LOGGER.warning("list fetch failed sort=%s page=%s error=%s", sort_type, page, e)
+                LOGGER.warning("list fetch failed sort=%s page=%s reason=%s error=%s", sort_type, page, reason, e)
                 if not quiet:
-                    print(f"  第{page}页抓取失败: {e}")
+                    print(f"  第{page}页抓取失败（{reason}）: {e}")
                 continue
             
             items = feed.get("items", [])
