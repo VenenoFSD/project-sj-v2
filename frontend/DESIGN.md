@@ -504,6 +504,8 @@ The inner input is permanently borderless and outline-less: it must not draw a s
 
 **`guest-favorite-badge`** — White rounded pill (`{rounded.full}`) at 11px / 600 weight. Sits over the photo with the system's only shadow tier applied for elevation.
 
+**Favorite button.** This product's save control is the heart described above, built as `{component.icon-button-circle}`: a 32px circle at a `{spacing.md}` inset from the photo's top-right corner, `--color-surface-strong` fill with an ink outline glyph at rest, and a `--color-accent` fill with a `--color-on-accent` solid glyph once saved. Because it sits on photography rather than on the canvas, it carries the card shadow tier for legibility — the same reasoning as `{component.guest-favorite-badge}`. Its hover and `:focus-visible` states step the fill to `--color-border` (unsaved) or `--color-accent-hover` (saved). The control flips its state immediately on click and only disables itself while the request is in flight, so the icon — not a spinner — is the feedback; a failed request flips it back and reports through the page's error band. The detail Drawer carries the same button in its top-right action cluster, next to the close button, at that cluster's 40px diameter with the same 18px glyph and full-circle radius.
+
 ### Listing Detail
 
 **`rating-display-card`** — The signature listing-detail moment. A 64px / 700 rating number ("4.81") flanked left and right by tiny laurel-wreath SVG ornaments. Beneath the rating: "Guest favorite" tagline and a row of ink stat columns. The largest typographic weight in the whole system.
@@ -552,7 +554,7 @@ The form label is `{typography.caption-sm}` at weight 600 in `{colors.ink}`, and
 
 | Name | Width | Key Changes |
 |---|---|---|
-| Mobile | < 744px | Top nav collapses to logo + hamburger; product tabs hide behind a sheet; search bar collapses to a single tappable pill; property cards stack 1-up; city grid 1-column; listing detail collapses reservation card to a sticky bottom bar. |
+| Mobile | < 744px | Top nav keeps its wordmark and both product tabs — only the brand name drops and the tab gap tightens to `{spacing.base}` (`{spacing.md}` below 420px) — because the tabs are the only route to the favorites page; search bar collapses to a single tappable pill; property cards stack 1-up; city grid 1-column; listing detail collapses reservation card to a sticky bottom bar. |
 | Tablet | 744–1128px | Top nav keeps product tabs but search bar narrows; property cards 2-up; city grid 2–3 column; reservation card stays sticky right-rail at narrower width. |
 | Desktop | 1128–1440px | Full top nav with three product tabs centered; search bar at full pill width with all 3 segments visible; property cards 4-up; city grid 6-column; listing detail 2-column with reservation rail. |
 | Wide | > 1440px | Content width caps at 1440px on listing/search pages and ~1280px on editorial; gutters absorb the rest. |
@@ -564,7 +566,7 @@ The form label is `{typography.caption-sm}` at weight 600 in `{colors.ink}`, and
 - Date-picker day cells are 40×40px circular.
 
 ### Collapsing Strategy
-- Top product tabs collapse into a hamburger sheet below 744px.
+- Top product tabs stay in the bar below 744px rather than collapsing into a hamburger sheet: with only two tabs (商品 / 收藏) they fit beside the wordmark and the account utilities, and hiding them would leave the favorites page unreachable on a phone. The gap between them tightens instead.
 - Search bar's 3 segments collapse into a single-tap entry that opens a full-screen search overlay on mobile.
 - Property and city-link grids drop column counts cleanly at each breakpoint — never reflow rows; always reduce columns.
 - Reservation card on listing detail switches from sticky right-rail to a sticky bottom bar on mobile, carrying just the "Reserve" CTA + nightly price summary.

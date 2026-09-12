@@ -28,6 +28,10 @@ Swagger UI：`http://127.0.0.1:8000/docs`
 
 `ip` 匹配的是商品详情属性中 `attrName` 为 `IP` 的 `attrValue`，因此只覆盖已用 `--detail` 采集过详情的商品；没有详情记录的商品不会出现在任何具体 IP 的结果里，只在 `ip` 留空时返回。可选的 IP 名从 `GET /api/catalog/ip` 获取，两边按名称匹配。
 
+`search` 按空白切分成多个关键词，每个关键词都必须在商品标题中出现（AND），所以词越多结果越窄。单个关键词按子串匹配且不区分大小写（SQLite 的 `LIKE` 对 ASCII 大小写不敏感），输入里的 `%`、`_`、`\` 按字面量处理，不会被当作通配符。只按空格搜索等价于不传 `search`。
+
+全角与半角的**符号**写法互通：`＋` 能匹配标题里的 `+`，输入 `!` 也能匹配标题里的 `！`。规则是半角可打印 ASCII（0x21-0x7E）与全角（U+FF01-U+FF5E）之间的标准宽度对应关系，且只对符号生效 —— 字母和数字按原样匹配（`ＡＢ` 只匹配全角、`AB` 只匹配半角）。`、`、`。` 这类中文标点不是宽度变体，也只按原样匹配；全角空格和半角空格作为分隔符等价，靠词与词之间的 AND 互通。一个关键词里有 4 个以上符号时不再展开，按原样匹配。
+
 ### `GET /api/products/{cluster_id}/history`
 
 查询商品价格历史。参数 `limit` 范围 1-200，默认 30。
@@ -98,6 +102,8 @@ GET /api/crawl-runs/tasks/{task_id}
 
 ### Favorites
 
-- `GET /api/favorites?user_id=default`：查询收藏
+- `GET /api/favorites?user_id=default`：查询收藏，按收藏时间倒序返回。响应包含 `items`，每项为 `{"id", "user_id", "created_at", "product"}`，其中 `product` 与 `GET /api/products` 的单项结构一致（含最新价格快照），前端收藏页直接复用商品卡片渲染。
 - `POST /api/favorites/{cluster_id}?user_id=default`：收藏商品
 - `DELETE /api/favorites/{cluster_id}?user_id=default`：取消收藏
+
+`user_id` 目前没有登录体系，前端不传该参数，固定使用默认值 `default`。

@@ -9,27 +9,6 @@ from backend.services import product_service
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-def product_payload(product, current_snapshot=None):
-    payload = {
-        "cluster_id": product.cluster_id,
-        "title": product.title,
-        "category": product.category,
-        "img": product.img,
-        "url": product.url,
-        "first_seen_at": product.first_seen_at,
-        "last_seen_at": product.last_seen_at,
-        "is_active": product.is_active,
-    }
-    if current_snapshot is not None:
-        payload.update({
-            "price": current_snapshot.price,
-            "reference_price": current_snapshot.reference_price,
-            "discount": current_snapshot.discount,
-            "popularity": current_snapshot.popularity,
-            "captured_at": current_snapshot.captured_at,
-        })
-    return payload
-
 def parse_json(value, default):
     try:
         return json.loads(value) if value else default
@@ -48,7 +27,7 @@ def get_products(
     db: Session = Depends(get_db),
 ):
     products = product_service.list_products(db, category, ip, search, sort, limit, offset)
-    return {"items": [product_payload(product, product_service.get_latest_snapshot(db, product.id)) for product in products], "total": product_service.count_products(db, category, ip, search), "limit": limit, "offset": offset}
+    return {"items": [product_service.product_payload(product, product_service.get_latest_snapshot(db, product.id)) for product in products], "total": product_service.count_products(db, category, ip, search), "limit": limit, "offset": offset}
 
 
 @router.get("/{cluster_id}/history")

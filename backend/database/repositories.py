@@ -1,4 +1,4 @@
-from sqlalchemy import desc, func, select, true
+from sqlalchemy import desc, func, or_, select, true
 from sqlalchemy.orm import Session, aliased
 
 from datetime import datetime
@@ -9,6 +9,11 @@ from backend.database.models import CrawlRun, Product, ProductDetail, ProductSna
 # 属性数组里，所以按 IP 筛选要读 `product_details.attributes`。没有详情记录的商品 IP 未知，
 # 任何具体 IP 都匹配不到 —— 这与详情、成交、价格点接口的数据覆盖限制一致。
 IP_ATTRIBUTE_NAME = "IP"
+
+# 一个关键词最多展开成多少个全角/半角写法，超过就退回原词，避免长英文词把 LIKE 条件撑爆。
+SEARCH_VARIANT_LIMIT = 8
+# 半角可打印 ASCII(0x21-0x7E) 与全角 U+FF01-U+FF5E 逐位对应，偏移量固定。
+FULL_WIDTH_OFFSET = 0xFEE0
 
 
 def ip_attribute_rows():
@@ -29,6 +34,60 @@ def ip_attribute_product_ids(ip: str):
     )
 
 
+def like_pattern(term: str):
+    """把关键词转成 LIKE 模式，`\\`、`%`、`_` 按字面量处理，不让用户输入变成通配符。"""
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def width_equivalents(char: str):
+    """一个字符的全角/半角等价写法，只对符号做转换，字母和数字原样保留。
+
+    字母数字排除在外是刻意的：`100%` 这样的词里两个数字就会吃掉展开预算，导致真正需要容忍的
+    符号反而退化成精确匹配；而用户手输全角字母数字的可能性极低。
+    """
+    if char.isalnum():
+        return (char,)
+    code = ord(char)
+    if 0x21 <= code <= 0x7E:
+        return (char, chr(code + FULL_WIDTH_OFFSET))
+    if 0xFF01 <= code <= 0xFF5E:
+        return (char, chr(code - FULL_WIDTH_OFFSET))
+    return (char,)
+
+
+def width_variants(term: str):
+    """一个关键词的全角/半角等价写法（按字符做笛卡尔积）。
+
+    标题里的符号可能是全角也可能是半角：中文标题常见全角「！」「（）」，而加号、百分号这类多为
+    半角。SQLite 的 LIKE 没有字符类（`[+＋]` 只有 GLOB 支持，而 GLOB 区分大小写），一个模式
+    匹配不了两种写法，所以展开成若干等价关键词再用 OR 组合。
+
+    组合数超过 `SEARCH_VARIANT_LIMIT` 时（一个词里有 4 个以上符号）退回原词，避免 LIKE 条件
+    爆炸。空白字符不会走到这里 —— 全角空格和半角空格在 `search_conditions` 里都已经当分隔符
+    切掉了，两种写法靠词与词之间的 AND 互通。
+    """
+    variants = [""]
+    for char in term:
+        variants = [prefix + item for prefix in variants for item in width_equivalents(char)]
+        if len(variants) > SEARCH_VARIANT_LIMIT:
+            return [term]
+    return variants
+
+
+def search_conditions(search: str):
+    """空格分隔的多个关键词按 AND 组合：标题要同时命中每一个词，词越多结果越窄。
+
+    `str.split()` 不带参数按空白切分（半角空格、全角空格、连续空格都算），所以只有空格时返回
+    空条件列表，等价于没有搜索。每个词内部再按全角/半角等价写法做 OR。
+    """
+    conditions = []
+    for term in search.split():
+        patterns = [like_pattern(variant) for variant in width_variants(term)]
+        conditions.append(or_(*[Product.title.ilike(pattern, escape="\\") for pattern in patterns]))
+    return conditions
+
+
 def list_products(db: Session, category: str | None, ip: str | None, search: str | None, sort: str | None, limit: int, offset: int):
     query = select(Product).where(Product.is_active.is_(True))
     if category:
@@ -36,7 +95,7 @@ def list_products(db: Session, category: str | None, ip: str | None, search: str
     if ip:
         query = query.where(Product.id.in_(ip_attribute_product_ids(ip)))
     if search:
-        query = query.where(Product.title.ilike(f"%{search}%"))
+        query = query.where(*search_conditions(search))
     if sort:
         latest_snapshot = aliased(ProductSnapshot)
         latest_snapshot_id = (
@@ -68,7 +127,7 @@ def count_products(db: Session, category: str | None, ip: str | None, search: st
     if ip:
         query = query.where(Product.id.in_(ip_attribute_product_ids(ip)))
     if search:
-        query = query.where(Product.title.ilike(f"%{search}%"))
+        query = query.where(*search_conditions(search))
     return db.scalar(query) or 0
 
 

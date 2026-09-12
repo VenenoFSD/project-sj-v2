@@ -15,6 +15,7 @@ Lightweight product tracking web application for Bilibili membership-store resal
 ```text
 frontend/              Vue frontend (product browsing and backend task management UI)
 frontend/src/composables/  Reusable Vue 3 composables shared across views
+frontend/src/utils/    Pure formatting/URL helpers shared by components
 backend/               FastAPI application, services, repositories, models and crawler
 backend/api/           FastAPI route modules
 backend/services/      Business logic
@@ -28,7 +29,8 @@ Keep clear boundaries:
 
 * Vue components handle UI and interaction.
 * `frontend/src/api/` handles API requests. Views and components import from it and never call `fetch` themselves.
-* `frontend/src/composables/` holds reusable stateful logic shared by more than one view or component, such as the theme store. Do not put API request code here.
+* `frontend/src/composables/` holds reusable stateful logic shared by more than one view or component, such as the theme store and the favorites store. Do not put API request code here.
+* `frontend/src/utils/` holds pure helpers with no state and no requests, currently the price/URL formatting shared by the product card, the price row and the detail drawer.
 * FastAPI `api/` handles HTTP endpoints.
 * Backend `services/` handles business logic.
 * Backend `database/` handles persistence.
@@ -70,6 +72,8 @@ The crawler creates the SQLite schema at startup. The current normalized schema 
 * `product_price_points` — raw chart points
 * `favorites` — user favorites (currently keyed by a caller-provided `user_id`, default `default`)
 
+`backend/database/session.py` `get_db` only closes the session — it does not commit. Every write must therefore commit explicitly in the service layer (`scheduler_service`, `favorite_service`), because a flushed-but-uncommitted change is rolled back when the request ends and the endpoint still answers 2xx. Repositories flush; services commit.
+
 Do not delete or recreate the database as part of normal code changes unless explicitly requested. The project currently permits rebuilding the database during development when the schema changes.
 
 ## Current capabilities and limits
@@ -78,8 +82,9 @@ Do not delete or recreate the database as part of normal code changes unless exp
 * `--detail` collects details for every product returned in a run; large runs can be slow and more likely to hit rate limits.
 * Detail, deal and price-point APIs only return data previously persisted by a crawler run using `--detail`.
 * The frontend implements product browsing (list, category, IP and sort filters, keyword search, pagination) and a product detail drawer with price-history and deal charts, plus backend pages for manual and scheduled crawls. It talks to the API only through `frontend/src/api/`.
+* Favorites are implemented: the heart sits top-right on the card photo and in the drawer's top-right action cluster, toggling through `frontend/src/composables/useFavorites.js`, which flips the icon immediately and rolls back if the request fails. The favorites page (`/favorites`) reuses `ProductGrid` without the search and filter bands. Favorites are stored under the backend's default `user_id`; there is no login yet.
 * The IP filter's options come from the captured IP catalog (`catalog_filters` where `filter_type='ip'`, surfaced by `GET /api/catalog/ip`), while the filter itself matches the `IP` attribute inside `product_details.attributes`, which the crawler only writes when a run used `--detail`. The two sides match on the IP name, so a zone listed in the catalog returns nothing until a detail run has stored that same name; products without details only appear when the IP filter is left on 全部.
-* Favorites and price-alert display are not implemented in the frontend yet.
+* Price-alert display is not implemented in the frontend yet.
 * Automated tests and authentication are not implemented yet.
 
 ## Documentation
