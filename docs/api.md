@@ -48,7 +48,7 @@ Swagger UI：`http://127.0.0.1:8000/docs`
 
 ### `POST /api/crawl-runs`
 
-后台启动一次爬虫任务。请求体字段：`pages`（0-500，默认 0）、`category`、`ip`、`sort`（`hot`、`mostListings`、`priceFirst`）、`detail`、`no_alert`。
+后台启动一次爬虫任务。请求体字段：`pages`（0-500，默认 0）、`category`、`ip`、`sort`（`hot`、`mostListings`、`priceFirst`）、`detail`、`no_alert`、`no_overview`（不打印首页概览，默认 `false`）。
 
 接口返回 `task_id` 后，可轮询任务状态：
 
@@ -62,7 +62,7 @@ GET /api/crawl-runs/tasks/{task_id}
 
 ### `POST /api/schedules`
 
-创建 interval 定时爬取任务。`interval_seconds` 范围为 60-2592000 秒，`crawl_params` 复用爬虫参数：`pages`、`category`、`ip`、`sort`、`detail` 和 `no_alert`。创建后任务默认启用。
+创建 interval 定时爬取任务。`interval_seconds` 范围为 60-2592000 秒，`crawl_params` 复用爬虫参数：`pages`、`category`、`ip`、`sort`、`detail`、`no_alert` 和 `no_overview`。创建后任务默认启用。
 
 ### `GET /api/schedules`
 

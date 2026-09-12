@@ -15,6 +15,8 @@ from backend.services import crawl_service
 LOGGER = logging.getLogger("product_tracker.scheduler")
 JOB_PREFIX = "scheduled_crawl_"
 SCHEDULER_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
+# Surfaced verbatim by the backend page, so it is written for the operator rather than the log.
+INTERRUPTED_RUN_ERROR = "服务重启，上次运行已中断"
 _scheduler: BackgroundScheduler | None = None
 _scheduler_lock = threading.RLock()
 
@@ -50,14 +52,22 @@ def decode_crawl_params(value: str) -> dict:
         raise ValueError("Invalid scheduled crawl parameters") from exc
 
 
+def _job_next_run_at(job) -> str | None:
+    """Reads a job's next fire time, or None when there is none.
+
+    Job declares next_run_time as a __slots__ member and only assigns it once the job reaches a
+    running scheduler: add_job() onto a stopped scheduler merely queues the job in _pending_jobs
+    and leaves the attribute unset, so reading it eagerly raises AttributeError.
+    """
+    next_run_time = getattr(job, "next_run_time", None)
+    return next_run_time.isoformat(timespec="seconds") if next_run_time else None
+
+
 def _next_run_at(schedule_id: int) -> str | None:
     with _scheduler_lock:
         if _scheduler is None:
             return None
-        job = _scheduler.get_job(_job_id(schedule_id))
-        if job is None or job.next_run_time is None:
-            return None
-        return job.next_run_time.isoformat(timespec="seconds")
+        return _job_next_run_at(_scheduler.get_job(_job_id(schedule_id)))
 
 
 def _write_run_state(schedule_id: int, **fields):
@@ -73,6 +83,25 @@ def _write_run_state(schedule_id: int, **fields):
         LOGGER.exception("schedule state update failed schedule_id=%s fields=%s", schedule_id, sorted(fields))
     finally:
         db.close()
+
+
+def _reconcile_interrupted_runs(db) -> int:
+    """Closes out schedules left in "running" by an interrupted shutdown.
+
+    Startup is the one moment where no crawl of this process can be running yet, so any stored
+    "running" state is necessarily stale — the subprocess was killed on shutdown and its watcher
+    thread, being a daemon, may not have written the failure before the interpreter exited. Left
+    alone the row would keep showing a ghost run and disable every row's actions in the UI.
+    """
+    schedules = repositories.list_running_scheduled_crawls(db)
+    for schedule in schedules:
+        schedule.last_status = "failed"
+        schedule.last_error = INTERRUPTED_RUN_ERROR
+        schedule.last_task_id = None
+        LOGGER.warning("stale run reconciled schedule_id=%s", schedule.id)
+    if schedules:
+        db.flush()
+    return len(schedules)
 
 
 def _add_job(scheduler: BackgroundScheduler, schedule_id: int, interval_seconds: int):
@@ -106,18 +135,21 @@ def init_scheduler():
         )
         db = SessionLocal()
         try:
+            reconciled_count = _reconcile_interrupted_runs(db)
+            # Start before registering: jobs added to a stopped scheduler are only queued in
+            # _pending_jobs, and their next_run_time stays unset until the scheduler starts.
+            scheduler.start()
             schedules = repositories.list_enabled_scheduled_crawls(db)
             for schedule in schedules:
                 try:
                     job = _add_job(scheduler, schedule.id, schedule.interval_seconds)
-                    schedule.next_run_at = job.next_run_time.isoformat(timespec="seconds") if job.next_run_time else None
-                    LOGGER.info("schedule job registered schedule_id=%s interval_seconds=%s reason=startup", schedule.id, schedule.interval_seconds)
+                    schedule.next_run_at = _job_next_run_at(job)
+                    LOGGER.info("schedule job registered schedule_id=%s interval_seconds=%s next_run_at=%s reason=startup", schedule.id, schedule.interval_seconds, schedule.next_run_at)
                 except Exception:
                     LOGGER.exception("schedule job registration failed schedule_id=%s reason=startup", schedule.id)
-            scheduler.start()
             _scheduler = scheduler
             db.commit()
-            LOGGER.info("scheduler initialized enabled_schedule_count=%s", len(schedules))
+            LOGGER.info("scheduler initialized enabled_schedule_count=%s reconciled_run_count=%s", len(schedules), reconciled_count)
         except Exception:
             db.rollback()
             if scheduler.running:
@@ -146,7 +178,7 @@ def register_job(schedule_id: int, interval_seconds: int) -> str | None:
         if _scheduler is None or not _scheduler.running:
             raise SchedulerUnavailableError("Scheduler is not running")
         job = _add_job(_scheduler, schedule_id, interval_seconds)
-    next_run_at = job.next_run_time.isoformat(timespec="seconds") if job.next_run_time else None
+    next_run_at = _job_next_run_at(job)
     LOGGER.info("schedule job registered schedule_id=%s interval_seconds=%s next_run_at=%s", schedule_id, interval_seconds, next_run_at)
     return next_run_at
 
@@ -172,7 +204,7 @@ def reschedule_job(schedule_id: int, interval_seconds: int) -> str | None:
         except JobLookupError:
             LOGGER.warning("schedule job missing during reschedule schedule_id=%s action=register", schedule_id)
             job = _add_job(_scheduler, schedule_id, interval_seconds)
-    next_run_at = job.next_run_time.isoformat(timespec="seconds") if job and job.next_run_time else None
+    next_run_at = _job_next_run_at(job)
     LOGGER.info("schedule job rescheduled schedule_id=%s interval_seconds=%s next_run_at=%s", schedule_id, interval_seconds, next_run_at)
     return next_run_at
 

@@ -8,3 +8,4 @@ class CrawlParams(BaseModel):
     sort: str = Field("hot", pattern="^(hot|mostListings|priceFirst)$")
     detail: bool = False
     no_alert: bool = False
+    no_overview: bool = False

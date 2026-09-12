@@ -48,7 +48,7 @@ def _watch(task_id: str, process: subprocess.Popen, on_complete: Callable[[str, 
                 LOGGER.exception("crawl completion callback failed task_id=%s", task_id)
 
 
-def start_crawl(*, pages: int, category: str | None, ip: str | None, sort: str, detail: bool, no_alert: bool, on_complete: Callable[[str, int], None] | None = None) -> str:
+def start_crawl(*, pages: int, category: str | None, ip: str | None, sort: str, detail: bool, no_alert: bool, no_overview: bool = False, on_complete: Callable[[str, int], None] | None = None) -> str:
     with _lock:
         if any(task["status"] == "running" for task in _tasks.values()):
             raise CrawlAlreadyRunningError("A crawl task is already running")
@@ -64,11 +64,13 @@ def start_crawl(*, pages: int, category: str | None, ip: str | None, sort: str, 
             args.append("--detail")
         if no_alert:
             args.append("--no-alert")
+        if no_overview:
+            args.append("--no-overview")
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         display_args = ["python", "-u", CRAWLER_PATH.relative_to(PROJECT_ROOT).as_posix(), *args[3:]]
         initial_output = f"$ {shlex.join(display_args)}\n\n"
-        LOGGER.info("starting crawl process task_id=%s pages=%s category=%s ip=%s sort=%s detail=%s no_alert=%s", task_id, pages, category, ip, sort, detail, no_alert)
+        LOGGER.info("starting crawl process task_id=%s pages=%s category=%s ip=%s sort=%s detail=%s no_alert=%s no_overview=%s", task_id, pages, category, ip, sort, detail, no_alert, no_overview)
         try:
             process = subprocess.Popen(
                 args,

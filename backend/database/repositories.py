@@ -87,6 +87,9 @@ def list_scheduled_crawls(db: Session):
 def list_enabled_scheduled_crawls(db: Session):
     return list(db.scalars(select(ScheduledCrawl).where(ScheduledCrawl.enabled.is_(True)).order_by(ScheduledCrawl.id.asc())))
 
+def list_running_scheduled_crawls(db: Session):
+    return list(db.scalars(select(ScheduledCrawl).where(ScheduledCrawl.last_status == "running").order_by(ScheduledCrawl.id.asc())))
+
 def update_scheduled_crawl(db: Session, schedule_id: int, *, updated_at: str, **fields):
     schedule = get_scheduled_crawl(db, schedule_id)
     if schedule is None:

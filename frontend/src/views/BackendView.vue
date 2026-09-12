@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { CalendarClock, Check, Clock3, Edit3, LoaderCircle, Moon, Play, Plus, Power, RefreshCw, Sun, Trash2, X } from 'lucide-vue-next'
+import { CalendarClock, Check, Clock3, Edit3, LoaderCircle, Moon, Play, Plus, Power, PowerOff, RefreshCw, Sun, Trash2, X } from 'lucide-vue-next'
 import { getCrawlTask, startCrawl } from '../api/crawl'
 import { createSchedule, deleteSchedule, listSchedules, runSchedule, updateSchedule } from '../api/schedules'
 import BaseSelect from '../components/BaseSelect.vue'
@@ -17,6 +17,7 @@ const form = ref({
   sort: 'hot',
   detail: true,
   no_alert: true,
+  no_overview: false,
 })
 const submitting = ref(false)
 const taskId = ref('')
@@ -25,6 +26,8 @@ const error = ref('')
 const pollTimer = ref(null)
 const pollInFlight = ref(false)
 const taskOutputElement = ref(null)
+const autoScroll = ref(true)
+const scheduleAutoScroll = ref(true)
 const { theme, toggleTheme } = useTheme()
 const sortOptions = [
   { value: 'hot', label: '热门' },
@@ -59,7 +62,10 @@ const scheduleForm = ref(createScheduleForm())
 
 const selectedSchedule = computed(() => schedules.value.find((item) => item.id === selectedScheduleId.value) || null)
 const runningSchedule = computed(() => schedules.value.find((item) => item.last_status === 'running') || null)
-const monitoredSchedule = computed(() => runningSchedule.value || selectedSchedule.value)
+// The monitor panel always describes the explicitly selected task. It is never replaced by
+// another task that happens to be running, so clicking a row can only ever show that row's
+// run information. Picking a sensible default (the running task) is loadSchedules' job.
+const monitoredSchedule = computed(() => selectedSchedule.value)
 const scheduleStatusLabel = computed(() => ({
   running: '运行中',
   success: '已完成',
@@ -74,13 +80,14 @@ const scheduleFormTitle = computed(() => scheduleModalMode.value === 'edit' ? '�
 function createScheduleForm() {
   return {
     name: '',
-    interval_seconds: 600,
+    interval_seconds: 1800,
     pages: 0,
-    category: '898',
+    category: '142',
     ip: '',
     sort: 'hot',
-    detail: false,
-    no_alert: false,
+    detail: true,
+    no_alert: true,
+    no_overview: true,
   }
 }
 
@@ -92,12 +99,16 @@ function stopPolling() {
 }
 
 function scrollTaskOutputToBottom() {
+  if (!autoScroll.value) return
   if (taskOutputElement.value) taskOutputElement.value.scrollTop = taskOutputElement.value.scrollHeight
 }
 
-function scrollScheduleOutputToBottom() {
+function scrollScheduleOutputToBottom(force = false) {
+  if (!scheduleAutoScroll.value) return
   const outputElement = document.querySelector('.schedule-output')
-  if (outputElement && scheduleTask.value?.status === 'running') outputElement.scrollTop = outputElement.scrollHeight
+  if (!outputElement) return
+  if (!force && scheduleTask.value?.status !== 'running') return
+  outputElement.scrollTop = outputElement.scrollHeight
 }
 
 async function pollTask() {
@@ -136,6 +147,7 @@ async function submitCrawl() {
       sort: form.value.sort,
       detail: form.value.detail,
       no_alert: form.value.no_alert,
+      no_overview: form.value.no_overview,
     })
     taskId.value = result.task_id
     task.value = result
@@ -155,13 +167,16 @@ function normalizeSchedulePayload(source) {
     sort: source.sort,
     detail: source.detail,
     no_alert: source.no_alert,
+    no_overview: source.no_overview,
   }
 }
 
 function selectSchedule(schedule) {
   selectedScheduleId.value = schedule?.id ?? null
   scheduleTask.value = null
-  void pollScheduleTask()
+  // Selecting a task takes over polling: a running task keeps refreshing every 2.5s, while an
+  // idle task fetches once and lets pollScheduleTask stop the timer by itself.
+  startSchedulePolling()
 }
 
 function stopSchedulePolling() {
@@ -171,8 +186,11 @@ function stopSchedulePolling() {
   }
 }
 
+// Polling always targets the selected task and is only started when that task has a run to read;
+// a task that never ran would otherwise keep a no-op timer alive forever.
 function startSchedulePolling() {
   stopSchedulePolling()
+  if (!monitoredSchedule.value?.last_task_id) return
   void pollScheduleTask()
   schedulePollTimer.value = window.setInterval(pollScheduleTask, 2500)
 }
@@ -183,12 +201,28 @@ async function pollScheduleTask() {
   schedulePollInFlight.value = true
   try {
     scheduleTask.value = await getCrawlTask(schedule.last_task_id)
-    if (scheduleTask.value.status !== 'running' && schedule.last_status !== 'running') stopSchedulePolling()
+    if (scheduleTask.value.status === 'running') return
+    // The run settled: stop following it, and pull the list once so the row's status, next run
+    // time and the action-button state catch up with what the panel already shows.
+    stopSchedulePolling()
+    if (schedule.last_status === 'running') await refreshSchedules()
   } catch (err) {
     if (schedule.last_status === 'running') scheduleError.value = err.message || '定时任务状态获取失败'
     stopSchedulePolling()
   } finally {
     schedulePollInFlight.value = false
+  }
+}
+
+// Refreshes list data only. Unlike loadSchedules it leaves selection and polling untouched, so
+// calling it from the polling loop can never restart the timer and spin.
+async function refreshSchedules() {
+  try {
+    const result = await listSchedules()
+    schedules.value = result.items || []
+    schedulesLoaded.value = true
+  } catch (err) {
+    scheduleError.value = err.message || '定时任务加载失败'
   }
 }
 
@@ -203,11 +237,8 @@ async function loadSchedules(selectId = selectedScheduleId.value) {
       || schedules.value.find((item) => item.last_status === 'running')
       || schedules.value[0]
     selectedScheduleId.value = preferred?.id ?? null
-    if (preferred?.last_task_id) startSchedulePolling()
-    else {
-      scheduleTask.value = null
-      stopSchedulePolling()
-    }
+    if (!preferred?.last_task_id) scheduleTask.value = null
+    startSchedulePolling()
   } catch (err) {
     scheduleError.value = err.message || '定时任务加载失败'
   } finally {
@@ -236,6 +267,7 @@ function openEditSchedule(schedule) {
     sort: params.sort || 'hot',
     detail: Boolean(params.detail),
     no_alert: Boolean(params.no_alert),
+    no_overview: Boolean(params.no_overview),
   }
   scheduleModalError.value = ''
   scheduleModalOpen.value = true
@@ -353,12 +385,21 @@ function isScheduleActionDisabled(schedule) {
   return schedulesLoading.value || scheduleTaskRunning.value || Boolean(runningSchedule.value && runningSchedule.value.id !== schedule.id)
 }
 
+// The backend refuses to run a disabled schedule with a 409, so "run now" is disabled for it as
+// well. Enable/edit/delete stay available, since they are how a disabled task is revived.
+function isScheduleTriggerDisabled(schedule) {
+  return !schedule.enabled || isScheduleActionDisabled(schedule)
+}
+
 onMounted(() => {
   applyStoredTheme()
   window.addEventListener('keydown', handleModalKeydown)
 })
 watch(() => task.value?.output, () => nextTick(scrollTaskOutputToBottom))
 watch(() => scheduleTask.value?.output, () => nextTick(scrollScheduleOutputToBottom))
+// Re-enabling the toggle jumps to the latest output immediately, even after a task settled.
+watch(autoScroll, (enabled) => { if (enabled) nextTick(scrollTaskOutputToBottom) })
+watch(scheduleAutoScroll, (enabled) => { if (enabled) nextTick(() => scrollScheduleOutputToBottom(true)) })
 watch(activePanel, (panel) => {
   if (panel === 'scheduled') {
     scheduleNotice.value = ''
@@ -445,6 +486,7 @@ onBeforeUnmount(() => {
           <div class="form-options">
             <label class="checkbox-label"><input v-model="form.detail" type="checkbox" /><span>获取商品详情</span></label>
             <label class="checkbox-label"><input v-model="form.no_alert" type="checkbox" /><span>关闭价格异动检测</span></label>
+            <label class="checkbox-label"><input v-model="form.no_overview" type="checkbox" /><span>不打印首页概览</span></label>
           </div>
           <div class="form-actions">
             <p>任务将在后台异步执行，启动后可查看实时输出。</p>
@@ -484,7 +526,12 @@ onBeforeUnmount(() => {
             <div><span>进程 ID</span><strong>{{ task.pid || '—' }}</strong></div>
             <div><span>返回码</span><strong>{{ task.return_code ?? '—' }}</strong></div>
           </div>
-          <div class="output-heading"><span>执行输出</span><span>{{ task.output ? 'LIVE OUTPUT' : 'WAITING' }}</span></div>
+          <div class="output-heading">
+            <span>执行输出</span>
+            <div class="output-heading-actions">
+              <label class="checkbox-label"><input v-model="autoScroll" type="checkbox" /><span>自动滚动</span></label>
+            </div>
+          </div>
           <pre ref="taskOutputElement" class="task-output">{{ task.output || '任务已启动，等待爬虫输出…' }}</pre>
         </template>
       </section>
@@ -519,23 +566,27 @@ onBeforeUnmount(() => {
         <div v-else class="schedule-table-wrap">
           <table class="schedule-table">
             <thead>
-              <tr><th>任务</th><th>执行间隔</th><th>最近状态</th><th>下次执行</th><th><span class="sr-only">操作</span></th></tr>
+              <tr><th>任务</th><th>状态</th><th>执行间隔</th><th>最近状态</th><th>下次执行</th><th><span class="sr-only">操作</span></th></tr>
             </thead>
             <tbody>
               <tr v-for="schedule in schedules" :key="schedule.id" :class="{ selected: selectedScheduleId === schedule.id }" tabindex="0" @click="selectSchedule(schedule)" @keydown.enter="selectSchedule(schedule)">
                 <td>
                   <div class="schedule-name-cell">
-                    <strong>{{ schedule.name || `任务 ${schedule.id}` }}</strong>
-                    <span>#{{ schedule.id }} · {{ schedule.crawl_params?.category || '全部分类' }}</span>
+                    <strong :title="schedule.name || `任务 ${schedule.id}`">{{ schedule.name || `任务 ${schedule.id}` }}</strong>
+                    <span :title="`#${schedule.id} · ${schedule.crawl_params?.category || '全部分类'}`">#{{ schedule.id }} · {{ schedule.crawl_params?.category || '全部分类' }}</span>
                   </div>
                 </td>
+                <td><span class="schedule-status" :class="schedule.enabled ? 'enabled' : 'disabled'"><span class="status-dot" :class="schedule.enabled ? 'enabled' : 'disabled'"></span>{{ schedule.enabled ? '启用' : '停用' }}</span></td>
                 <td class="schedule-interval"><Clock3 :size="15" :stroke-width="1.8" aria-hidden="true" />{{ formatInterval(schedule.interval_seconds) }}</td>
                 <td><span class="schedule-status" :class="scheduleStatusClass(schedule.last_status)"><span class="status-dot" :class="scheduleStatusClass(schedule.last_status)"></span>{{ scheduleStatusText(schedule.last_status) }}</span></td>
-                <td class="schedule-next-run">{{ schedule.enabled ? formatScheduleTime(schedule.next_run_at) : '已停用' }}</td>
+                <td class="schedule-next-run">{{ formatScheduleTime(schedule.next_run_at) }}</td>
                 <td>
                   <div class="schedule-actions" @click.stop>
-                    <button class="icon-action" type="button" :disabled="isScheduleActionDisabled(schedule)" aria-label="立即触发" title="立即触发" @click="triggerSchedule(schedule)"><Play :size="15" :stroke-width="2" aria-hidden="true" /></button>
-                    <button class="icon-action" type="button" :aria-label="schedule.enabled ? '停用任务' : '启用任务'" :title="schedule.enabled ? '停用任务' : '启用任务'" @click="toggleSchedule(schedule)"><Power :size="15" :stroke-width="2" aria-hidden="true" /></button>
+                    <button class="icon-action" type="button" :disabled="isScheduleTriggerDisabled(schedule)" aria-label="立即触发" :title="schedule.enabled ? '立即触发' : '任务已停用，无法触发'" @click="triggerSchedule(schedule)"><Play :size="15" :stroke-width="2" aria-hidden="true" /></button>
+                    <button class="icon-action" type="button" :aria-label="schedule.enabled ? '停用任务' : '启用任务'" :title="schedule.enabled ? '停用任务' : '启用任务'" @click="toggleSchedule(schedule)">
+                      <PowerOff v-if="schedule.enabled" :size="15" :stroke-width="2" aria-hidden="true" />
+                      <Power v-else :size="15" :stroke-width="2" aria-hidden="true" />
+                    </button>
                     <button class="icon-action" type="button" aria-label="编辑任务" title="编辑任务" @click="openEditSchedule(schedule)"><Edit3 :size="15" :stroke-width="1.8" aria-hidden="true" /></button>
                     <button class="icon-action danger-action" type="button" aria-label="删除任务" title="删除任务" @click="removeSchedule(schedule)"><Trash2 :size="15" :stroke-width="1.8" aria-hidden="true" /></button>
                   </div>
@@ -563,7 +614,7 @@ onBeforeUnmount(() => {
         <template v-else>
           <div class="monitor-title-row">
             <div>
-              <span class="monitor-eyebrow">{{ runningSchedule ? '当前运行的定时任务' : '已选定时任务' }}</span>
+              <span class="monitor-eyebrow">{{ monitoredSchedule.last_status === 'running' ? '当前运行的定时任务' : '已选定时任务' }}</span>
               <h3>{{ monitoredSchedule.name || `任务 ${monitoredSchedule.id}` }}</h3>
             </div>
             <span class="schedule-status large-status" :class="scheduleStatusTone"><span class="status-dot" :class="scheduleStatusTone"></span>{{ scheduleStatusLabel }}</span>
@@ -577,14 +628,21 @@ onBeforeUnmount(() => {
           <div class="monitor-params">
             <span>页数 {{ monitoredSchedule.crawl_params?.pages === 0 ? '全量' : monitoredSchedule.crawl_params?.pages }}</span>
             <span>分类 {{ monitoredSchedule.crawl_params?.category || '全部' }}</span>
+            <span>IP 分区 {{ monitoredSchedule.crawl_params?.ip || '不限' }}</span>
             <span>排序 {{ sortOptions.find((option) => option.value === monitoredSchedule.crawl_params?.sort)?.label || monitoredSchedule.crawl_params?.sort }}</span>
             <span>{{ monitoredSchedule.crawl_params?.detail ? '含商品详情' : '不含商品详情' }}</span>
+            <span>{{ monitoredSchedule.crawl_params?.no_overview ? '不打印首页概览' : '打印首页概览' }}</span>
           </div>
           <p v-if="monitoredSchedule.last_error" class="error-message monitor-error" role="alert">{{ monitoredSchedule.last_error }}</p>
           <div v-if="scheduleTask" class="schedule-task-panel">
-            <div class="output-heading"><span>执行输出</span><span>{{ scheduleTaskRunning ? 'LIVE OUTPUT' : 'TASK OUTPUT' }}</span></div>
+            <div class="output-heading">
+              <span>执行输出</span>
+              <div class="output-heading-actions">
+                <label class="checkbox-label"><input v-model="scheduleAutoScroll" type="checkbox" /><span>自动滚动</span></label>
+              </div>
+            </div>
             <div class="task-facts">
-              <div><span>任务 ID</span><strong class="compact-task-id">{{ scheduleTask.task_id || monitoredSchedule.last_task_id }}</strong></div>
+              <div><span>任务 ID</span><strong class="compact-task-id" :title="scheduleTask.task_id || monitoredSchedule.last_task_id">{{ scheduleTask.task_id || monitoredSchedule.last_task_id }}</strong></div>
               <div><span>返回码</span><strong>{{ scheduleTask.return_code ?? '—' }}</strong></div>
             </div>
             <pre class="task-output schedule-output">{{ scheduleTask.output || '任务已启动，等待爬虫输出…' }}</pre>
@@ -596,7 +654,7 @@ onBeforeUnmount(() => {
 
     <AppFooter />
     <Teleport to="body">
-      <div v-if="scheduleModalOpen" class="modal-backdrop" role="presentation" @click.self="closeScheduleModal">
+      <div v-if="scheduleModalOpen" class="modal-backdrop" role="presentation">
         <section class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
           <div class="modal-heading">
             <div><p class="section-kicker">SCHEDULE CONFIGURATION</p><h2 id="schedule-modal-title">{{ scheduleFormTitle }}</h2></div>
@@ -610,7 +668,7 @@ onBeforeUnmount(() => {
             <label><span>商品分类</span><input v-model="scheduleForm.category" type="text" placeholder="例如 898" /><small>留空表示全部分类</small></label>
             <label><span>IP 分区</span><input v-model="scheduleForm.ip" type="text" placeholder="可选" /><small>留空表示不限制</small></label>
             <BaseSelect v-model="scheduleForm.sort" label="排序方式" hint="对应爬虫排序参数" :options="sortOptions" />
-            <div class="schedule-form-options wide-field"><label class="checkbox-label"><input v-model="scheduleForm.detail" type="checkbox" /><span>获取商品详情</span></label><label class="checkbox-label"><input v-model="scheduleForm.no_alert" type="checkbox" /><span>关闭价格异动检测</span></label></div>
+            <div class="schedule-form-options wide-field"><label class="checkbox-label"><input v-model="scheduleForm.detail" type="checkbox" /><span>获取商品详情</span></label><label class="checkbox-label"><input v-model="scheduleForm.no_alert" type="checkbox" /><span>关闭价格异动检测</span></label><label class="checkbox-label"><input v-model="scheduleForm.no_overview" type="checkbox" /><span>不打印首页概览</span></label></div>
             <div class="modal-actions wide-field"><button class="secondary-button" type="button" :disabled="scheduleSubmitting" @click="closeScheduleModal">取消</button><button class="primary-button" type="submit" :disabled="scheduleSubmitting"><LoaderCircle v-if="scheduleSubmitting" class="spin-icon" :size="16" :stroke-width="2" aria-hidden="true" /><span>{{ scheduleSubmitting ? '保存中…' : '保存任务' }}</span></button></div>
           </form>
         </section>
@@ -655,7 +713,7 @@ onBeforeUnmount(() => {
    the placeholder and the caret never shift by a pixel (same rule as the search pill). */
 .crawl-form input[type="number"]:focus, .crawl-form input[type="text"]:focus, .crawl-form select:focus { border-color: var(--color-focus); box-shadow: none; }
 .crawl-form small { min-height: 16px; color: var(--color-text-disabled); font-size: var(--fs-12); line-height: 1.3; }
-.form-options { display: flex; grid-column: 1 / -1; gap: 24px; padding-top: 4px; border-top: 1px solid var(--color-border-soft); }
+.form-options { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 24px; padding-top: 4px; border-top: 1px solid var(--color-border-soft); }
 .checkbox-label { display: inline-flex; flex-direction: row !important; align-items: center; gap: 8px !important; padding-top: 16px; color: var(--color-text-secondary); font-size: var(--fs-13); white-space: nowrap; cursor: pointer; }
 .checkbox-label input { width: 16px; height: 16px; accent-color: var(--color-accent); }
 .form-actions { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; gap: 20px; padding-top: 8px; }
@@ -685,9 +743,15 @@ onBeforeUnmount(() => {
 .polling-label { flex: 0 0 auto; color: var(--color-text-muted); font-size: var(--fs-12); }
 .task-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .task-facts div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border-soft); color: var(--color-text-muted); font-size: var(--fs-13); }
-.task-facts strong { color: var(--color-text-primary); font-weight: 500; }
-.output-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; color: var(--color-text-primary); font-size: var(--fs-13); font-weight: 600; }
-.output-heading span:last-child { color: var(--color-text-disabled); font-size: var(--fs-11); letter-spacing: 1px; text-transform: uppercase; }
+/* Labels such as "任务 ID" contain a space and would otherwise break across two lines
+   once the value column takes its width; the value shrinks with an ellipsis instead. */
+.task-facts div > span { flex: 0 0 auto; white-space: nowrap; }
+.task-facts strong { min-width: 0; color: var(--color-text-primary); font-weight: 500; }
+.output-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 24px; color: var(--color-text-primary); font-size: var(--fs-13); font-weight: 600; }
+.output-heading-actions { display: flex; align-items: center; gap: 16px; }
+/* The terminal's auto-scroll toggle is a secondary control, so it drops the checkbox
+   row's top padding and the heading's weight/colour. */
+.output-heading .checkbox-label { padding-top: 0; color: var(--color-text-muted); font-size: var(--fs-12); font-weight: 500; }
 .task-output { min-height: 180px; max-height: 360px; margin: 12px 0 0; padding: 16px; overflow: auto; border-radius: 8px; background: var(--color-surface-soft); color: var(--color-text-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--fs-12); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .compact-button { min-width: 120px; height: 44px; padding: 0 16px; }
 .schedule-workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(340px, .9fr); gap: 24px; align-items: start; }
@@ -702,16 +766,26 @@ onBeforeUnmount(() => {
 .schedule-table tbody tr { outline: 0; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-standard); }
 .schedule-table tbody tr:hover, .schedule-table tbody tr:focus-visible, .schedule-table tbody tr.selected { background: var(--color-surface-soft); }
 .schedule-table tbody tr:last-child td { border-bottom: 0; }
-.schedule-name-cell { display: flex; min-width: 140px; flex-direction: column; gap: 4px; }
+/* The name cell is the only column with room to give — the other five are nowrap, so the old
+   140px floor held the table slightly wider than the card and popped the x-scrollbar. Capping it
+   pins the column at a predictable width instead, the same truncating-cell pattern as
+   .compact-task-id, so both lines carry a title to keep their full text reachable. */
+.schedule-name-cell { display: flex; max-width: 112px; flex-direction: column; gap: 4px; }
 .schedule-name-cell strong { overflow: hidden; color: var(--color-text-primary); font-size: var(--fs-14); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .schedule-name-cell span, .schedule-next-run { color: var(--color-text-muted); font-size: var(--fs-12); white-space: nowrap; }
+.schedule-name-cell span { overflow: hidden; text-overflow: ellipsis; }
 .schedule-interval { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .schedule-status { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); font-size: var(--fs-12); white-space: nowrap; }
 .schedule-status.running, .schedule-status.success { color: var(--color-success); }
 .schedule-status.failed, .schedule-status.error { color: var(--color-error); }
 .schedule-status.skipped { color: var(--color-text-muted); }
+/* Enabled flag column: green when the schedule is armed, muted once it is switched off. */
+.schedule-status.enabled { color: var(--color-success); }
+.schedule-status.disabled { color: var(--color-text-disabled); }
 .status-dot.pending { background: var(--color-text-disabled); }
 .status-dot.skipped { background: var(--color-text-disabled); }
+.status-dot.enabled { background: var(--color-success); }
+.status-dot.disabled { background: var(--color-text-disabled); }
 .status-dot.error { background: var(--color-error); }
 .schedule-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .icon-action, .refresh-button, .modal-close { display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--color-text-muted); cursor: pointer; }
@@ -735,10 +809,13 @@ onBeforeUnmount(() => {
 .monitor-params span { padding: 6px 8px; border-radius: 9999px; background: var(--color-surface-soft); color: var(--color-text-secondary); font-size: var(--fs-11); }
 .monitor-error { margin-top: 20px; margin-bottom: 0; }
 .schedule-task-panel { margin-top: 24px; }
+/* 返回码 is at most a few characters, so the task ID takes the wider column. */
+.schedule-task-panel .task-facts { grid-template-columns: minmax(0, 1.5fr) minmax(0, .7fr); }
 .compact-task-id { max-width: 152px; overflow: hidden; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .schedule-output { min-height: 150px; max-height: 250px; }
 .monitor-last-run { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-border-soft); }
-.monitor-last-run strong { max-width: 192px; overflow: hidden; color: var(--color-text-disabled); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--fs-11); text-overflow: ellipsis; white-space: nowrap; }
+.monitor-last-run span { flex: 0 0 auto; white-space: nowrap; }
+.monitor-last-run strong { min-width: 0; max-width: 192px; overflow: hidden; color: var(--color-text-disabled); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--fs-11); text-overflow: ellipsis; white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .spin-icon { animation: spin var(--duration-spin) linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -755,7 +832,7 @@ onBeforeUnmount(() => {
 .schedule-form input:not([type="checkbox"]):focus, .schedule-form select:focus { border-color: var(--color-focus); box-shadow: none; }
 .schedule-form small { min-height: 16px; color: var(--color-text-disabled); font-size: var(--fs-12); line-height: 1.3; }
 .wide-field { grid-column: 1 / -1; }
-.schedule-form-options { display: flex; gap: 24px; padding-top: 4px; border-top: 1px solid var(--color-border-soft); }
+.schedule-form-options { display: flex; flex-wrap: wrap; gap: 24px; padding-top: 4px; border-top: 1px solid var(--color-border-soft); }
 .schedule-form-options .checkbox-label { padding-top: 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 8px; }
 @media (max-width: 1128px) {
@@ -780,9 +857,9 @@ onBeforeUnmount(() => {
   .schedule-table-wrap { margin: 0 -24px -24px; }
   .schedule-table th:first-child, .schedule-table td:first-child { padding-left: 24px; }
   .schedule-table th:last-child, .schedule-table td:last-child { padding-right: 24px; }
-  .schedule-table th:nth-child(2), .schedule-table td:nth-child(2) { display: none; }
+  .schedule-table th:nth-child(3), .schedule-table td:nth-child(3) { display: none; }
   .schedule-next-run { display: none; }
-  .schedule-table th:nth-child(4), .schedule-table td:nth-child(4) { display: none; }
+  .schedule-table th:nth-child(5), .schedule-table td:nth-child(5) { display: none; }
   .schedule-actions { gap: 0; }
   .icon-action { width: 34px; height: 34px; }
   .modal-backdrop { padding: 12px; }
@@ -801,7 +878,7 @@ onBeforeUnmount(() => {
   .backend-page-tab svg { display: none; }
   .schedule-list-heading { align-items: flex-start; }
   .compact-button { min-width: 104px; padding: 0 12px; }
-  .schedule-table th:nth-child(3), .schedule-table td:nth-child(3) { display: none; }
+  .schedule-table th:nth-child(4), .schedule-table td:nth-child(4) { display: none; }
   .schedule-table td { height: 68px; }
   .schedule-actions { justify-content: flex-start; }
   .schedule-form { display: block; }
